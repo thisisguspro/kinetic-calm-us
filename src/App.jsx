@@ -94,11 +94,11 @@ export default function App() {
       const q = new URLSearchParams(window.location.search).get('layout');
       if (q && LAYOUT_OPTIONS.some((l) => l.id === q)) return q;
       try {
-        const saved = localStorage.getItem('kc_layout_v3');
+        const saved = localStorage.getItem('kc_layout_v4');
         if (saved && LAYOUT_OPTIONS.some((l) => l.id === saved)) return saved;
       } catch {}
     }
-    return 'bento_arcade';
+    return 'stat_deck';
   });
 
   const [emotePack, setEmotePack] = useState(() => {
@@ -106,12 +106,17 @@ export default function App() {
       const q = new URLSearchParams(window.location.search).get('emotes');
       if (q && EMOTE_PACK_OPTIONS.some((e) => e.id === q)) return q;
       try {
-        const saved = localStorage.getItem('kc_emote_pack_v3');
+        const saved = localStorage.getItem('kc_emote_pack_v4');
         if (saved && EMOTE_PACK_OPTIONS.some((e) => e.id === saved)) return saved;
       } catch {}
     }
-    return 'mochi_chime';
+    return 'paw_wave';
   });
+
+  const isStudioPreview = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('studio') === '1';
+  }, []);
 
   const [theme, setTheme] = useState(() => {
     try {
@@ -158,13 +163,13 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('kc_layout_v3', layoutMode);
+      localStorage.setItem('kc_layout_v4', layoutMode);
     } catch {}
   }, [layoutMode]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('kc_emote_pack_v3', emotePack);
+      localStorage.setItem('kc_emote_pack_v4', emotePack);
     } catch {}
   }, [emotePack]);
 
@@ -202,23 +207,31 @@ export default function App() {
       .catch(() => {});
   }, []);
 
-  // Scroll-Driven Pinned 4-Item Top Carousel Listener
+  // Scroll-Driven Pinned 4-Item Top Carousel Listener (works across window & document scroll roots)
   useEffect(() => {
+    const HEADER_H = 61;
     const handleScroll = () => {
       const el = heroTrackRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      const scrollable = Math.max(1, el.offsetHeight - window.innerHeight);
-      const scrolled = Math.min(scrollable, Math.max(0, -rect.top));
+      const stageH = Math.max(360, window.innerHeight - HEADER_H);
+      const scrollable = Math.max(1, el.offsetHeight - stageH);
+      const scrolled = Math.min(scrollable, Math.max(0, HEADER_H - rect.top));
       const pct = scrolled / scrollable;
       setHeroScrollPct(pct);
       const nextSlide = Math.min(3, Math.max(0, Math.floor(pct * 3.999)));
       setHeroIdx((prev) => (prev === nextSlide ? prev : nextSlide));
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
+    document.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    window.addEventListener('resize', handleScroll, { passive: true });
     handleScroll();
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      document.removeEventListener('scroll', handleScroll, { capture: true });
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [heroItems.length]);
 
   const jumpToHeroSlide = (targetIdx) => {
     const el = heroTrackRef.current;
@@ -226,9 +239,12 @@ export default function App() {
       setHeroIdx(targetIdx);
       return;
     }
-    const scrollable = Math.max(1, el.offsetHeight - window.innerHeight);
-    const trackTop = el.getBoundingClientRect().top + window.scrollY;
-    const targetY = trackTop + (targetIdx / 3.95) * scrollable + 6;
+    const HEADER_H = 61;
+    const stageH = Math.max(360, window.innerHeight - HEADER_H);
+    const scrollable = Math.max(1, el.offsetHeight - stageH);
+    const scrollRoot = document.scrollingElement || document.documentElement;
+    const trackTop = el.getBoundingClientRect().top + (scrollRoot.scrollTop || window.scrollY || 0) - HEADER_H;
+    const targetY = Math.max(0, trackTop + (targetIdx / 3.92) * scrollable + 8);
     window.scrollTo({ top: targetY, behavior: 'smooth' });
     setHeroIdx(targetIdx);
   };
@@ -580,21 +596,23 @@ export default function App() {
           </a>
 
           <nav aria-label="Main navigation" style={{ display: 'flex', alignItems: 'center', gap: '1.1rem' }}>
-            <a href="#feel-lab" className="font-neo" style={{ textDecoration: 'none', color: 'var(--text)', fontWeight: 700, fontSize: '0.88rem' }}>
-              Play Lab
-            </a>
             <a href="#collection" className="font-neo" style={{ textDecoration: 'none', color: 'var(--text)', fontWeight: 700, fontSize: '0.88rem' }}>
               Shop ({catalog.length || 12})
             </a>
-            <button
-              type="button"
-              onClick={() => setDesignDockOpen((o) => !o)}
-              className="btn-ghost"
-              style={{ padding: '0.38rem 0.75rem', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-            >
-              <SlidersHorizontal size={13} />
-              <span>Layouts &amp; Emotes</span>
-            </button>
+            <a href="#feel-lab" className="font-neo" style={{ textDecoration: 'none', color: 'var(--text)', fontWeight: 700, fontSize: '0.88rem' }}>
+              Play Lab
+            </a>
+            {isStudioPreview && (
+              <button
+                type="button"
+                onClick={() => setDesignDockOpen((o) => !o)}
+                className="btn-ghost"
+                style={{ padding: '0.38rem 0.75rem', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+              >
+                <SlidersHorizontal size={13} />
+                <span>Layouts &amp; Emotes</span>
+              </button>
+            )}
           </nav>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -689,26 +707,27 @@ export default function App() {
 
       <main>
         {/* ===================================================================
-            PINNED 4-ITEM SCROLL-DRIVEN TOP SHOWCASE CAROUSEL (320vh Track!)
+            PINNED 4-ITEM SCROLL-DRIVEN TOP SHOWCASE CAROUSEL (280vh Sticky Stage)
             Scrolls smoothly through ALL 4 signature items before releasing!
             =================================================================== */}
         <div
           ref={heroTrackRef}
           style={{
             position: 'relative',
-            height: heroItems.length >= 4 ? '315vh' : 'auto',
+            height: heroItems.length >= 4 ? '280vh' : 'auto',
           }}
         >
           <section
             aria-label="Featured 4-item scroll showcase"
             style={{
               position: heroItems.length >= 4 ? 'sticky' : 'relative',
-              top: '62px',
-              minHeight: 'calc(100vh - 64px)',
+              top: '61px',
+              height: heroItems.length >= 4 ? 'calc(100vh - 61px)' : 'auto',
+              minHeight: '520px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
-              padding: '1.35rem 1.25rem 1.6rem',
+              padding: '1.15rem 1.25rem 1.35rem',
               background:
                 theme === 'dark'
                   ? `radial-gradient(circle at 68% 44%, ${activeHeroTheme.stageGlow}, transparent 58%)`
@@ -718,7 +737,7 @@ export default function App() {
           >
             <div style={{ maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
               {activeHero && (
-                <div className="pinned-hero-grid">
+                <div key={activeHero.id} className="pinned-hero-grid hero-slide-enter">
                   {/* LEFT: Clay-Cloud Spacious Copy + Neo-Pop Typography, Emotes & Inline Stepper */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
@@ -1159,7 +1178,7 @@ export default function App() {
         )}
 
         {/* ===================================================================
-            LAYOUT 4: COLLECTIBLE STAT-CARD & LIVE BUNDLE DECK
+            LAYOUT 4: COLLECTIBLE STAT-CARD & LIVE BUNDLE DECK (LOCKED FLAGSHIP)
             =================================================================== */}
         {layoutMode === 'stat_deck' && (
           <>
@@ -1170,37 +1189,89 @@ export default function App() {
                   padding: '1.25rem 1.5rem',
                   background: theme === 'dark' ? 'var(--surface)' : 'linear-gradient(120deg, #DCFCE7 0%, #FFF3C4 100%)',
                   display: 'flex',
-                  flexWrap: 'wrap',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
+                  flexDirection: 'column',
                   gap: '1rem',
                   color: theme === 'dark' ? 'var(--text)' : '#141417',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-                  <PackageCheck size={28} />
-                  <div>
-                    <div className="font-display" style={{ fontSize: '1.25rem', fontWeight: 800 }}>
-                      Build Your Desk &amp; Travel Calm Kit
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                    <PackageCheck size={28} />
+                    <div>
+                      <div className="font-display" style={{ fontSize: '1.28rem', fontWeight: 800 }}>
+                        Build Your 3-Piece Desk &amp; Travel Calm Kit
+                      </div>
+                      <div style={{ fontSize: '0.84rem', opacity: 0.88 }}>
+                        Click <strong>+ Add</strong> on any stat-card below — orders $65+ unlock automatic Free US Shipping ({freeShipRemaining <= 0 ? 'Unlocked!' : `$${freeShipRemaining.toFixed(0)} away`}).
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.84rem', opacity: 0.88 }}>
-                      Add any items inline below — orders $65+ unlock automatic Free US Shipping ({freeShipRemaining <= 0 ? 'Unlocked!' : `$${freeShipRemaining.toFixed(0)} away`}).
-                    </div>
+                  </div>
+
+                  {/* Live 3-Slot Bundle Visual Tray */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {[0, 1, 2].map((slotIdx) => {
+                      const expandedBag = bag.flatMap((bi) => Array(bi.quantity).fill(bi));
+                      const filledItem = expandedBag[slotIdx];
+                      return (
+                        <div
+                          key={slotIdx}
+                          title={filledItem ? filledItem.name : `Slot ${slotIdx + 1} empty`}
+                          style={{
+                            width: '46px',
+                            height: '46px',
+                            borderRadius: '0.8rem',
+                            border: filledItem ? '2px solid #141417' : '2px dashed rgba(20, 20, 23, 0.38)',
+                            backgroundColor: filledItem ? '#FFFFFF' : 'rgba(255, 255, 255, 0.55)',
+                            boxShadow: filledItem ? '2px 2px 0px #141417' : 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            overflow: 'hidden',
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                          }}
+                        >
+                          {filledItem ? (
+                            <img src={filledItem.image_url} alt={filledItem.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <span className="font-neo" style={{ opacity: 0.55 }}>0{slotIdx + 1}</span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                  {SOUND_FILTERS.map((sf) => (
-                    <button
-                      key={sf.id}
-                      type="button"
-                      onClick={() => setSoundFilter(sf.id)}
-                      className={soundFilter === sf.id ? 'btn-primary' : 'btn-ghost'}
-                      style={{ padding: '0.38rem 0.75rem', fontSize: '0.75rem' }}
-                    >
-                      {sf.label}
-                    </button>
-                  ))}
+                {/* Category + Sound Filter Bar */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.65rem', paddingTop: '0.75rem', borderTop: '1.5px dashed rgba(20, 20, 23, 0.2)' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                    {COLLECTIONS.map((col) => (
+                      <button
+                        key={col.id}
+                        type="button"
+                        onClick={() => setActiveCollection(col.id)}
+                        className={activeCollection === col.id ? 'btn-primary' : 'btn-ghost'}
+                        style={{ padding: '0.38rem 0.78rem', fontSize: '0.76rem' }}
+                      >
+                        {col.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span className="font-neo" style={{ fontSize: '0.72rem', fontWeight: 800 }}>Sound:</span>
+                    {SOUND_FILTERS.map((sf) => (
+                      <button
+                        key={sf.id}
+                        type="button"
+                        onClick={() => setSoundFilter(sf.id)}
+                        className={soundFilter === sf.id ? 'btn-primary' : 'btn-ghost'}
+                        style={{ padding: '0.34rem 0.68rem', fontSize: '0.73rem' }}
+                      >
+                        {sf.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </section>
