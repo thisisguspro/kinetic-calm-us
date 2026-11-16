@@ -41,7 +41,7 @@ export function classifySoundProfile(item) {
     return { kind: 'silent', shortLabel: '0 dB Silent', pillBg: '#DCFCE7', pillInk: '#065F46', level: 0 };
   }
   if (raw.includes('thock') || raw.includes('click') || raw.includes('ratchet')) {
-    return { kind: 'click', shortLabel: 'Creamy Click', pillBg: '#FEF3C7', pillInk: '#92400E', level: 3 };
+    return { kind: 'click', shortLabel: 'Crisp Click', pillBg: '#FEF3C7', pillInk: '#92400E', level: 3 };
   }
   return { kind: 'whisper', shortLabel: 'Quiet Hum', pillBg: '#E0F2FE', pillInk: '#075985', level: 1 };
 }

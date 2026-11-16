@@ -118,7 +118,7 @@
   {
     "id": "SH-4KEY-CREAMY-CLICKER",
     "sku": "KC-US-005",
-    "name": "4-Key Creamy Switch Clicker",
+    "name": "4-Key Tactile Switch Clicker",
     "subtitle": "Pastel PBT Keycaps + Braided Lanyard",
     "brand": "Kinetic Calm",
     "collection": "clickers_sliders",
@@ -130,19 +130,19 @@
     "squish_level": 2,
     "squish_label": "Spring Keycap",
     "calm_score": 5,
-    "vibe_chip": "Creamy Thock",
+    "vibe_chip": "Crisp Click",
     "is_on_promotion": false,
     "vault_discount_eligible": true,
     "vault_earn_eligible": true,
     "age_grade": "Ages 8+",
-    "sound_db": "38 dB Mechanical Thock",
-    "texture_profile": "4 Switch Profiles: Creamy Linear, POM, Tactile & Crisp Click",
+    "sound_db": "38 dB Crisp Mechanical Click",
+    "texture_profile": "4 Switch Profiles: Deep, Smooth, Tactile & Crisp Click",
     "material_spec": "Crystal Polycarbonate Base + Matte Pastel PBT Keycaps + Braided Wrist Strap",
     "cpsia_astm_note": "WARNING: CHOKING HAZARD — Removable keycaps and switches. Not for children under 3 years.",
     "fda_wellness_note": "General wellness tactile keychain. Not intended to treat or cure any condition.",
     "image_url": "/products/sh-4key-creamy-clicker.jpg",
-    "short_tagline": "Four custom mechanical keyboard switches tuned from deep thock to crisp click.",
-    "full_story": "For anyone who loves the sound and feel of a custom mechanical keyboard. Each pastel PBT cap sits on a distinct hot-swappable switch so your fingers get four satisfyingly different clicks on one lanyard."
+    "short_tagline": "Four custom mechanical keyboard switches tuned from soft press to crisp click.",
+    "full_story": "For anyone who loves the sound and feel of a mechanical keyboard. Each pastel PBT cap sits on a distinct hot-swappable switch so your fingers get four satisfyingly different clicks on one lanyard."
   },
   {
     "id": "SH-ICE-CUBE-GEL-TRIO",

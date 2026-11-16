@@ -1,18 +1,28 @@
 import express from 'express';
 import session from 'express-session';
 import createMemoryStore from 'memorystore';
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
+  MAIN_SUPER_ADMIN_EMAIL,
   MAX_LOYALTY_DISCOUNT_PCT,
   MIN_NET_MARGIN_PCT,
+  SUPER_ADMIN_EMAILS,
   computeServerQuote,
   computeSkuMargins,
+  decorateUserWithRoles,
+  findReferralOwnerByCode,
+  getUserById,
+  isAdminEmail,
+  isSuperAdminEmail,
   loadCatalog,
   normalizeEmail,
   readStore,
+  upsertGoogleUser,
   writeStore,
 } from './adminStore.js';
 
@@ -23,6 +33,16 @@ const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const PORT = Number(process.env.PORT || 3007);
 const IS_PROD = process.env.NODE_ENV === 'production';
 
+const isRealCred = (val) =>
+  Boolean(
+    val &&
+      String(val).trim() !== '' &&
+      !['pending', 'placeholder', 'none', 'todo', 'false', 'null'].includes(String(val).trim().toLowerCase())
+  );
+
+const hasGoogleCreds =
+  isRealCred(process.env.GOOGLE_CLIENT_ID) && isRealCred(process.env.GOOGLE_CLIENT_SECRET);
+
 const app = express();
 const MemoryStore = createMemoryStore(session);
 
@@ -30,8 +50,16 @@ app.disable('x-powered-by');
 app.set('trust proxy', 1);
 
 // 1. FIRST MIDDLEWARE: Early Dotfile, Internal File & Path Traversal 404 Shield
-// Runs BEFORE static extension checks or session/body parsers so /.env, /.git, /server, /shared, /data NEVER leak.
-const BLOCKED_INTERNAL_PREFIXES = ['/server', '/shared', '/data', '/scripts', '/node_modules', '/package.json', '/package-lock.json', '/vite.config'];
+const BLOCKED_INTERNAL_PREFIXES = [
+  '/server',
+  '/shared',
+  '/data',
+  '/scripts',
+  '/node_modules',
+  '/package.json',
+  '/package-lock.json',
+  '/vite.config',
+];
 
 app.use((req, res, next) => {
   const rawUrl = String(req.url || '/');
@@ -56,11 +84,11 @@ app.use((req, res, next) => {
   return next();
 });
 
-// 2. Global Security Headers Middleware (20-Point Defense)
+// 2. Global Security Headers Middleware (20-Point Defense + Google OAuth & Stripe Allowlist)
 app.use((req, res, next) => {
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com; frame-src https://js.stripe.com https://checkout.stripe.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
+    "default-src 'self'; script-src 'self' https://js.stripe.com https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com https://accounts.google.com; frame-src https://js.stripe.com https://checkout.stripe.com https://accounts.google.com; form-action 'self' https://checkout.stripe.com https://accounts.google.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
   );
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -83,6 +111,7 @@ app.use(
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    rolling: true,
     store: new MemoryStore({ checkPeriod: 86400000 }),
     cookie: {
       httpOnly: true,
@@ -93,8 +122,81 @@ app.use(
   })
 );
 
+app.use(passport.initialize());
+app.use(passport.session());
+
+if (hasGoogleCreds) {
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: process.env.GOOGLE_CLIENT_ID.trim(),
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET.trim(),
+        callbackURL: process.env.GOOGLE_CALLBACK_URL || '/api/auth/google/callback',
+        passReqToCallback: true,
+      },
+      (req, _accessToken, _refreshToken, profile, done) => {
+        try {
+          const email = profile.emails?.[0]?.value || '';
+          const name = profile.displayName || profile.name?.givenName || 'Kinetic Calm Member';
+          const avatarUrl = profile.photos?.[0]?.value || null;
+          const refCookie = req.session?.pendingReferralCode || null;
+          const user = upsertGoogleUser({
+            googleId: profile.id,
+            email,
+            name,
+            avatarUrl,
+            referredByCode: refCookie,
+          });
+          return done(null, user);
+        } catch (err) {
+          return done(err);
+        }
+      }
+    )
+  );
+}
+
+passport.serializeUser((user, done) => done(null, user.id));
+passport.deserializeUser((id, done) => {
+  const user = getUserById(id);
+  done(null, user || false);
+});
+
+function isLocalhostRequest(req) {
+  if (IS_PROD) return false;
+  const ip = String(req.ip || req.socket?.remoteAddress || '');
+  const host = String(req.hostname || req.get('host') || '').toLowerCase();
+  const isLoopbackIp = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip === '';
+  const isLocalHost = host.startsWith('localhost') || host.startsWith('127.0.0.1') || host.startsWith('[::1]');
+  return isLoopbackIp && isLocalHost;
+}
+
+function loginWithSessionRegeneration(req, res, next, user, redirectUrl) {
+  const preservedRef = req.session?.pendingReferralCode || null;
+  if (!req.session || typeof req.session.regenerate !== 'function') {
+    return req.login(user, (err) => {
+      if (err) return next(err);
+      return res.redirect(redirectUrl);
+    });
+  }
+  req.session.regenerate((regenErr) => {
+    if (regenErr) return next(regenErr);
+    if (preservedRef) req.session.pendingReferralCode = preservedRef;
+    req.login(user, (loginErr) => {
+      if (loginErr) return next(loginErr);
+      req.session.save(() => res.redirect(redirectUrl));
+    });
+  });
+}
+
 // 3. Strict CSRF Guard on State-Changing Routes
-const TRUSTED_PROD_HOSTS = new Set(['kineticcalm.us', 'www.kineticcalm.us', 'sensoryhaven.us', 'www.sensoryhaven.us']);
+const TRUSTED_PROD_HOSTS = new Set([
+  'kineticcalm.us',
+  'www.kineticcalm.us',
+  'sensoryhaven.us',
+  'www.sensoryhaven.us',
+  'kinetic-calm-us.onrender.com',
+]);
 
 function isTrustedOriginHeader(urlLike, hostHeader) {
   if (!urlLike) return true;
@@ -130,7 +232,313 @@ app.use('/api', (req, res, next) => {
   return next();
 });
 
-// 4. Health, SEO Robots & Sitemap
+// ============================================================================
+// 4. GOOGLE AUTHENTICATION & STRICT LOGIN-REQUIRED GUARDS (CUSTOMER + ADMIN)
+// ============================================================================
+app.get('/api/auth/google', (req, res, next) => {
+  const ref =
+    typeof req.query.ref === 'string'
+      ? req.query.ref.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 24)
+      : '';
+  const returnTo = req.query.admin === '1' ? '/?open=admin' : '/?open=account';
+  if (ref && req.session) {
+    req.session.pendingReferralCode = ref;
+  }
+  if (req.session) {
+    req.session.postLoginRedirect = returnTo;
+  }
+  if (hasGoogleCreds) {
+    return passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+  }
+  if (!isLocalhostRequest(req)) {
+    return res.redirect('/?auth_notice=google_oauth_pending');
+  }
+  // Localhost-only preview helper when GOOGLE_CLIENT_ID is not yet set in .env
+  const wantAdmin = req.query.role === 'admin' || req.query.admin === '1';
+  const devUser = upsertGoogleUser({
+    googleId: wantAdmin ? 'google-local-founder-admin' : 'google-local-customer-preview',
+    email: wantAdmin ? MAIN_SUPER_ADMIN_EMAIL : 'shopper.preview@kineticcalm.us',
+    name: wantAdmin ? 'Gustavo (Founder Super-Admin)' : 'Shopper Preview (Google Account)',
+    avatarUrl: null,
+    referredByCode: ref || null,
+  });
+  return loginWithSessionRegeneration(req, res, next, devUser, returnTo);
+});
+
+app.get(
+  '/api/auth/google/callback',
+  (req, res, next) => {
+    if (!hasGoogleCreds) return res.redirect('/');
+    return passport.authenticate('google', {
+      failureRedirect: '/?auth_notice=failed',
+      keepSessionInfo: true,
+    })(req, res, next);
+  },
+  (req, res, next) => {
+    if (!req.user) return res.redirect('/?auth_notice=failed');
+    const redirectTo = req.session?.postLoginRedirect || '/?open=account';
+    return loginWithSessionRegeneration(req, res, next, req.user, redirectTo);
+  }
+);
+
+app.get('/api/auth/me', (req, res) => {
+  const loggedIn = Boolean(req.isAuthenticated && req.isAuthenticated() && req.user?.id);
+  const fresh = loggedIn ? getUserById(req.user.id) : null;
+  res.json({
+    authenticated: Boolean(fresh),
+    google_oauth_live_configured: hasGoogleCreds,
+    localhost_dev_helper_enabled: !hasGoogleCreds && isLocalhostRequest(req),
+    user: fresh || null,
+  });
+});
+
+app.post('/api/auth/logout', (req, res, next) => {
+  req.logout((err) => {
+    if (err) return next(err);
+    if (req.session) {
+      req.session.destroy(() => {
+        res.clearCookie('kc_us_sid', { httpOnly: true, sameSite: 'lax' });
+        res.json({ ok: true });
+      });
+    } else {
+      res.clearCookie('kc_us_sid');
+      res.json({ ok: true });
+    }
+  });
+});
+
+function requireAuth(req, res, next) {
+  if (!req.isAuthenticated || !req.isAuthenticated() || !req.user?.id) {
+    return res.status(401).json({ error: 'Please sign in with Google to view your orders and rewards.' });
+  }
+  const fresh = getUserById(req.user.id);
+  if (!fresh) {
+    return res.status(401).json({ error: 'Session expired. Please sign in with Google again.' });
+  }
+  req.currentUser = fresh;
+  return next();
+}
+
+// STRICT ADMIN LOGIN GATE: Admin actions ALWAYS require an authenticated Admin Google session!
+function requireAdminAuth(req, res, next) {
+  if (!req.isAuthenticated || !req.isAuthenticated() || !req.user?.id) {
+    return res.status(401).json({
+      error: 'Admin Sign-In Required: Please sign in with an authorized Kinetic Calm Admin Google account.',
+    });
+  }
+  const fresh = getUserById(req.user.id);
+  if (!fresh || !isAdminEmail(fresh.email)) {
+    return res.status(403).json({
+      error: 'Access Denied: Your Google account is not on the authorized Kinetic Calm Admin allowlist.',
+    });
+  }
+  req.currentUser = fresh;
+  return next();
+}
+
+function requireSuperAdminAuth(req, res, next) {
+  return requireAdminAuth(req, res, () => {
+    if (!isSuperAdminEmail(req.currentUser?.email)) {
+      return res.status(403).json({ error: 'Only the Founder Super-Admin can modify admin permissions.' });
+    }
+    return next();
+  });
+}
+
+// ============================================================================
+// 5. AUTHENTICATED CUSTOMER ORDERS & LUNA-STYLE REFERRAL VAULT ROUTES
+// ============================================================================
+app.get('/api/my/orders', requireAuth, (req, res) => {
+  const store = readStore();
+  const email = normalizeEmail(req.currentUser.email);
+  const myOrders = store.orders
+    .filter((o) => normalizeEmail(o.customer_email || o.email) === email)
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  res.json({
+    zero_fake_data: true,
+    email,
+    orders_count: myOrders.length,
+    orders: myOrders,
+  });
+});
+
+app.get('/api/my/referrals', requireAuth, (req, res) => {
+  const u = req.currentUser;
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.json({
+    referral_code: u.referral_code,
+    share_url: `${baseUrl}/?ref=${encodeURIComponent(u.referral_code)}`,
+    friend_welcome_pct: 10,
+    referrer_reward_per_friend_pct: 10,
+    max_loyalty_cap_pct: MAX_LOYALTY_DISCOUNT_PCT,
+    referrals_completed_count: Number(u.referrals_completed_count || 0),
+    unlocked_vault_pct: Math.min(MAX_LOYALTY_DISCOUNT_PCT, Number(u.unlocked_vault_pct || 0)),
+    pending_escrow_pct: Number(u.pending_escrow_pct || 0),
+    referred_by_code: u.referred_by_code || null,
+    friend_welcome_available: Boolean(u.referred_by_code && !u.friend_welcome_used),
+  });
+});
+
+// ============================================================================
+// 6. STRICTLY PROTECTED FOUNDER / CO-OWNER ADMIN CONSOLE ROUTES
+// ============================================================================
+app.get('/api/admin/overview', requireAdminAuth, (req, res) => {
+  const store = readStore();
+  const catalog = loadCatalog();
+  const skuAudit = catalog.map((sku) => ({
+    ...sku,
+    margins: computeSkuMargins(sku),
+  }));
+  const totalRevenue = store.orders.reduce((s, o) => s + Number(o.total_usd || 0), 0);
+  res.json({
+    ok: true,
+    admin_user: req.currentUser,
+    zero_fake_data: true,
+    metrics: {
+      orders_count: store.orders.length,
+      revenue_usd: Number(totalRevenue.toFixed(2)),
+      waitlist_count: store.waitlist_subscribers.length,
+      registered_members_count: Object.keys(store.users || {}).length,
+    },
+    orders: store.orders.slice().reverse(),
+    waitlist_subscribers: store.waitlist_subscribers.slice().reverse(),
+    bundle_config: store.bundle_config,
+    promo_codes: store.promo_codes,
+    catalog: skuAudit,
+    super_admin_emails: SUPER_ADMIN_EMAILS,
+    co_admin_emails: store.co_admin_emails || [],
+  });
+});
+
+app.post('/api/admin/promos', requireAdminAuth, (req, res) => {
+  const { action, code, discount_pct, min_subtotal_usd, active, label } = req.body || {};
+  const cleanCode = String(code || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '')
+    .slice(0, 24);
+  if (!cleanCode) {
+    return res.status(400).json({ error: 'Valid alphanumeric promo code is required.' });
+  }
+  const store = readStore();
+  if (action === 'delete') {
+    delete store.promo_codes[cleanCode];
+    writeStore(store);
+    return res.json({ ok: true, promo_codes: store.promo_codes });
+  }
+  if (action === 'toggle') {
+    if (!store.promo_codes[cleanCode]) {
+      return res.status(404).json({ error: 'Promo code not found.' });
+    }
+    store.promo_codes[cleanCode].active = Boolean(active);
+    writeStore(store);
+    return res.json({ ok: true, promo_codes: store.promo_codes });
+  }
+  const pct = Math.max(1, Math.min(MAX_LOYALTY_DISCOUNT_PCT, Number(discount_pct || 10)));
+  const minSub = Math.max(0, Number(min_subtotal_usd || 0));
+  store.promo_codes[cleanCode] = {
+    discount_pct: pct,
+    min_subtotal_usd: minSub,
+    active: active !== false,
+    non_stackable: true,
+    label: String(label || `${pct}% Off ($${minSub}+)`).slice(0, 80),
+    updated_by: req.currentUser.email,
+    updated_at: new Date().toISOString(),
+  };
+  writeStore(store);
+  return res.json({ ok: true, promo_codes: store.promo_codes });
+});
+
+app.post('/api/admin/bundle-config', requireAdminAuth, (req, res) => {
+  const { active, min_items, discount_pct, free_gift_threshold_usd, free_gift_label } = req.body || {};
+  const store = readStore();
+  store.bundle_config = {
+    active: active !== undefined ? Boolean(active) : store.bundle_config.active,
+    min_items: Math.max(2, Math.min(6, Math.floor(Number(min_items || store.bundle_config.min_items || 3)))),
+    discount_pct: Math.max(5, Math.min(MAX_LOYALTY_DISCOUNT_PCT, Number(discount_pct || store.bundle_config.discount_pct || 12))),
+    free_gift_threshold_usd: Math.max(45, Number(free_gift_threshold_usd || store.bundle_config.free_gift_threshold_usd || 85)),
+    free_gift_label: String(free_gift_label || store.bundle_config.free_gift_label || 'Free Calm Strip Travel Pack').slice(0, 90),
+  };
+  writeStore(store);
+  return res.json({ ok: true, bundle_config: store.bundle_config });
+});
+
+app.post('/api/admin/sku-override', requireAdminAuth, (req, res) => {
+  const { id, price_usd, is_on_promotion, sale_price_usd, partner_url, track } = req.body || {};
+  const catalog = loadCatalog();
+  const baseSku = catalog.find((c) => c.id === id);
+  if (!baseSku) {
+    return res.status(404).json({ error: 'Product SKU not found.' });
+  }
+  const candidate = {
+    ...baseSku,
+    price_usd: price_usd !== undefined ? Number(price_usd) : baseSku.price_usd,
+    is_on_promotion: is_on_promotion !== undefined ? Boolean(is_on_promotion) : baseSku.is_on_promotion,
+    sale_price_usd: sale_price_usd !== undefined ? Number(sale_price_usd) : baseSku.sale_price_usd,
+    track: track === 'TRACK_B_PARTNER' ? 'TRACK_B_PARTNER' : 'TRACK_A_DIRECT',
+    partner_url: partner_url !== undefined ? String(partner_url || '').trim().slice(0, 300) : baseSku.partner_url,
+  };
+  const marginCheck = computeSkuMargins(candidate);
+  if (!marginCheck.passes_20pct_floor) {
+    return res.status(400).json({
+      error: `Rejected by 20% Net Margin Floor Guard (net margin would drop to ${marginCheck.discounted_30_margin_pct}%).`,
+    });
+  }
+  const store = readStore();
+  store.sku_overrides[id] = {
+    price_usd: candidate.price_usd,
+    is_on_promotion: candidate.is_on_promotion,
+    sale_price_usd: candidate.sale_price_usd || null,
+    track: candidate.track,
+    partner_url: candidate.partner_url || null,
+    updated_by: req.currentUser.email,
+    updated_at: new Date().toISOString(),
+  };
+  writeStore(store);
+  return res.json({ ok: true, sku: { ...candidate, margins: marginCheck } });
+});
+
+app.post('/api/admin/orders/:orderId/status', requireAdminAuth, (req, res) => {
+  const { orderId } = req.params;
+  const { status, tracking_number, carrier } = req.body || {};
+  const store = readStore();
+  const idx = store.orders.findIndex((o) => o.id === orderId);
+  if (idx < 0) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
+  store.orders[idx] = {
+    ...store.orders[idx],
+    status: String(status || store.orders[idx].status || 'PROCESSING').slice(0, 32),
+    tracking_number: tracking_number !== undefined ? String(tracking_number).trim().slice(0, 64) : store.orders[idx].tracking_number,
+    carrier: carrier !== undefined ? String(carrier).trim().slice(0, 32) : store.orders[idx].carrier,
+    updated_at: new Date().toISOString(),
+  };
+  writeStore(store);
+  return res.json({ ok: true, order: store.orders[idx] });
+});
+
+app.post('/api/admin/co-admins', requireSuperAdminAuth, (req, res) => {
+  const { action, email } = req.body || {};
+  const clean = normalizeEmail(email);
+  if (!clean || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(clean)) {
+    return res.status(400).json({ error: 'Valid Google email address is required.' });
+  }
+  if (SUPER_ADMIN_EMAILS.includes(clean)) {
+    return res.status(400).json({ error: 'Super-Admin email is permanently protected.' });
+  }
+  const store = readStore();
+  if (action === 'remove') {
+    store.co_admin_emails = store.co_admin_emails.filter((e) => normalizeEmail(e) !== clean);
+  } else if (!store.co_admin_emails.map((e) => normalizeEmail(e)).includes(clean)) {
+    store.co_admin_emails.push(clean);
+  }
+  writeStore(store);
+  return res.json({ ok: true, co_admin_emails: store.co_admin_emails });
+});
+
+// ============================================================================
+// 7. PUBLIC HEALTH, ROBOTS, SITEMAP, CATALOG & QUOTE/CHECKOUT ROUTES
+// ============================================================================
 app.get('/api/health', (_req, res) => {
   const store = readStore();
   res.json({
@@ -140,6 +548,8 @@ app.get('/api/health', (_req, res) => {
     zero_fake_data: true,
     fda_general_wellness: true,
     cpsia_astm_f963: true,
+    google_login_enabled: true,
+    admin_login_required: true,
     orders_count: store.orders.length,
     reviews_count: store.reviews.length,
     ts: new Date().toISOString(),
@@ -163,8 +573,8 @@ app.get('/sitemap.xml', (req, res) => {
   );
 });
 
-// 5. Public Catalog & Unit Economics / Compliance Gate
 app.get('/api/catalog', (_req, res) => {
+  const store = readStore();
   const catalog = loadCatalog().map(({ cost_usd: _hiddenCost, ...publicSku }) => ({
     ...publicSku,
     compliance_verified: Boolean(publicSku.cpsia_astm_note && publicSku.fda_wellness_note),
@@ -175,7 +585,19 @@ app.get('/api/catalog', (_req, res) => {
     total_skus: catalog.length,
     track_a_count: catalog.filter((i) => i.track === 'TRACK_A_DIRECT').length,
     track_b_count: catalog.filter((i) => i.track === 'TRACK_B_PARTNER').length,
+    bundle_config: store.bundle_config,
     items: catalog,
+  });
+});
+
+app.get('/api/referral-verify', (req, res) => {
+  const code = String(req.query.ref || '').trim().toUpperCase().slice(0, 24);
+  const owner = findReferralOwnerByCode(code);
+  res.json({
+    valid: Boolean(owner),
+    code: owner ? owner.referral_code : null,
+    referrer_first_name: owner ? String(owner.name || 'Friend').split(' ')[0] : null,
+    friend_welcome_pct: 10,
   });
 });
 
@@ -217,15 +639,16 @@ app.get('/api/compliance-audit', (_req, res) => {
   });
 });
 
-// 6. Server-Computed Quote, Waitlist & Stripe Checkout Guard
 app.post('/api/quote', (req, res) => {
-  const { items, promo_code, vault_discount_pct, email } = req.body || {};
-  const quote = computeServerQuote(items, promo_code, vault_discount_pct, email);
+  const { items, promo_code, vault_discount_pct, email, referral_code } = req.body || {};
+  const sessionEmail = req.user?.id ? getUserById(req.user.id)?.email : '';
+  const effectiveEmail = sessionEmail || email || '';
+  const effectiveRef = referral_code || req.session?.pendingReferralCode || '';
+  const quote = computeServerQuote(items, promo_code, vault_discount_pct, effectiveEmail, effectiveRef);
   res.json(quote);
 });
 
 app.post('/api/waitlist', (req, res) => {
-  // Explicit NFKC + 128-char email normalization (Zero-Fake-Data waitlist ledger)
   const rawEmail = String(req.body?.email || '').normalize('NFKC').trim().toLowerCase().slice(0, 128);
   const email = normalizeEmail(rawEmail);
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
@@ -243,9 +666,11 @@ app.post('/api/waitlist', (req, res) => {
 });
 
 app.post('/api/checkout', (req, res) => {
-  const { items, promo_code, vault_discount_pct, email } = req.body || {};
-  const cleanEmail = normalizeEmail(email);
-  const quote = computeServerQuote(items, promo_code, vault_discount_pct, cleanEmail);
+  const { items, promo_code, vault_discount_pct, email, referral_code } = req.body || {};
+  const sessionUser = req.user?.id ? getUserById(req.user.id) : null;
+  const cleanEmail = normalizeEmail(sessionUser?.email || email);
+  const effectiveRef = referral_code || req.session?.pendingReferralCode || '';
+  const quote = computeServerQuote(items, promo_code, vault_discount_pct, cleanEmail, effectiveRef);
   if (!quote.items.length) {
     return res.status(400).json({ error: 'Your sensory bag has no direct-checkout items.' });
   }
@@ -268,7 +693,7 @@ app.post('/api/checkout', (req, res) => {
   });
 });
 
-// 7. Static Assets & SPA Fallback
+// 8. Static Assets & SPA Fallback
 if (fs.existsSync(PUBLIC_DIR)) {
   app.use(express.static(PUBLIC_DIR, { dotfiles: 'ignore', index: false }));
 }

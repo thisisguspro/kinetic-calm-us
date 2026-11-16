@@ -13,9 +13,16 @@ import {
   SlidersHorizontal,
   Sparkles,
   PackageCheck,
+  User,
+  ShieldCheck,
+  ExternalLink,
 } from 'lucide-react';
 import TactileFeelLab from './TactileFeelLab.jsx';
 import LegalViews from './LegalViews.jsx';
+import {
+  CustomerAccountModal,
+  AdminConsoleModal,
+} from './AccountAndAdminModals.jsx';
 import {
   EMOTE_PACK_OPTIONS,
   SensoryStatCluster,
@@ -50,14 +57,14 @@ const COLLECTIONS = [
   { id: 'all', label: 'All 12 Toys' },
   { id: 'squishies_calm', label: 'Slow-Rise Squishies' },
   { id: 'fidget_spinners', label: 'R188 Spinners' },
-  { id: 'clickers_sliders', label: 'Creamy Clickers' },
+  { id: 'clickers_sliders', label: 'Tactile Clickers' },
   { id: 'musical_plush', label: 'Musical Plush' },
 ];
 
 const SOUND_FILTERS = [
   { id: 'all', label: 'Any Sound' },
   { id: 'silent', label: '0 dB Library Silent' },
-  { id: 'click', label: 'Satisfying Click / Thock' },
+  { id: 'click', label: 'Crisp Click' },
   { id: 'melody', label: 'Plays Music' },
 ];
 
@@ -150,10 +157,31 @@ export default function App() {
   });
   const [bagOpen, setBagOpen] = useState(false);
   const [promoCode, setPromoCode] = useState('');
-  const [vaultDiscountPct] = useState(0);
+  const [vaultDiscountPct, setVaultDiscountPct] = useState(0);
   const [quote, setQuote] = useState(null);
   const [checkoutStatus, setCheckoutStatus] = useState('');
   const [toastMsg, setToastMsg] = useState('');
+
+  const [authState, setAuthState] = useState({ authenticated: false, user: null, localhost_dev_helper_enabled: false });
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [bundleConfig, setBundleConfig] = useState({ active: true, min_items: 3, discount_pct: 12 });
+  const [referralCodeFromUrl, setReferralCodeFromUrl] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    const qRef = new URLSearchParams(window.location.search).get('ref') || '';
+    if (qRef) {
+      try {
+        localStorage.setItem('kc_pending_ref', qRef.trim().toUpperCase());
+      } catch {}
+      return qRef.trim().toUpperCase();
+    }
+    try {
+      return localStorage.getItem('kc_pending_ref') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [referralBanner, setReferralBanner] = useState(null);
 
   const [legalOpen, setLegalOpen] = useState(false);
   const [legalTab, setLegalTab] = useState('fda');
@@ -198,14 +226,58 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  useEffect(() => {
+  const refreshCatalog = () => {
     fetch('/api/catalog')
       .then((r) => r.json())
       .then((catData) => {
         setCatalog(Array.isArray(catData?.items) ? catData.items : []);
+        if (catData?.bundle_config) setBundleConfig(catData.bundle_config);
       })
       .catch(() => {});
+  };
+
+  const refreshAuth = () => {
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((d) => {
+        setAuthState(d || { authenticated: false, user: null });
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    refreshCatalog();
+    refreshAuth();
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const openTarget = params.get('open');
+      if (openTarget === 'account') setAccountOpen(true);
+      if (openTarget === 'admin') setAdminOpen(true);
+      if (openTarget && window.history?.replaceState) {
+        params.delete('open');
+        const qs = params.toString();
+        window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+      }
+    }
   }, []);
+
+  useEffect(() => {
+    if (!referralCodeFromUrl) return;
+    fetch(`/api/referral-verify?ref=${encodeURIComponent(referralCodeFromUrl)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.valid) setReferralBanner(d);
+      })
+      .catch(() => {});
+  }, [referralCodeFromUrl]);
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    setAuthState({ authenticated: false, user: null });
+    setVaultDiscountPct(0);
+    setAdminOpen(false);
+    setAccountOpen(false);
+  };
 
   // Scroll-Driven Pinned 4-Item Top Carousel Listener (works across window & document scroll roots)
   useEffect(() => {
@@ -261,12 +333,14 @@ export default function App() {
         items: bag.map((i) => ({ id: i.id, quantity: i.quantity })),
         promo_code: promoCode,
         vault_discount_pct: vaultDiscountPct,
+        email: authState?.user?.email || newsletterEmail,
+        referral_code: referralCodeFromUrl,
       }),
     })
       .then((r) => r.json())
       .then((q) => setQuote(q))
       .catch(() => {});
-  }, [bag, promoCode, vaultDiscountPct]);
+  }, [bag, promoCode, vaultDiscountPct, authState?.user?.email, referralCodeFromUrl]);
 
   const triggerInkSplashTheme = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -446,11 +520,21 @@ export default function App() {
                   flexShrink: 0,
                   padding: '0.1rem 0.48rem',
                   borderRadius: '0.5rem',
-                  backgroundColor: 'var(--surface-muted)',
+                  backgroundColor: item.is_on_promotion ? 'var(--surface-blush)' : 'var(--surface-muted)',
+                  color: item.is_on_promotion ? '#9F1239' : undefined,
                   border: '1.5px solid var(--border)',
                 }}
               >
-                ${Number(item.price_usd).toFixed(0)}
+                {item.is_on_promotion && item.sale_price_usd ? (
+                  <>
+                    <span style={{ textDecoration: 'line-through', opacity: 0.55, marginRight: '0.28rem', fontSize: '0.84em' }}>
+                      ${Number(item.price_usd).toFixed(0)}
+                    </span>
+                    ${Number(item.sale_price_usd).toFixed(0)}
+                  </>
+                ) : (
+                  `$${Number(item.price_usd).toFixed(0)}`
+                )}
               </span>
             </div>
             <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.22rem' }}>
@@ -489,7 +573,29 @@ export default function App() {
             }}
           >
             <SensoryStatCluster item={item} emotePack={emotePack} compact={!featuredWide} />
-            <GroceryQtyStepper item={item} bag={bag} onAdd={addToBag} onUpdateQty={updateBagQty} />
+            {item.track === 'TRACK_B_PARTNER' ? (
+              <a
+                href={item.partner_url || '#'}
+                target="_blank"
+                rel="noopener noreferrer sponsored"
+                onClick={(e) => e.stopPropagation()}
+                className="btn-ghost"
+                style={{
+                  textDecoration: 'none',
+                  padding: '0.44rem 0.85rem',
+                  borderRadius: '999px',
+                  fontSize: '0.78rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.32rem',
+                }}
+              >
+                <span>Shop Partner</span>
+                <ExternalLink size={13} />
+              </a>
+            ) : (
+              <GroceryQtyStepper item={item} bag={bag} onAdd={addToBag} onUpdateQty={updateBagQty} />
+            )}
           </div>
         </div>
       </article>
@@ -615,7 +721,27 @@ export default function App() {
             )}
           </nav>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.48rem' }}>
+            {authState?.user?.is_admin && (
+              <button
+                type="button"
+                onClick={() => setAdminOpen(true)}
+                className="btn-ghost"
+                style={{ padding: '0.46rem 0.78rem', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '0.32rem' }}
+              >
+                <ShieldCheck size={14} />
+                <span>Admin</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setAccountOpen(true)}
+              className="btn-ghost"
+              style={{ padding: '0.46rem 0.82rem', fontSize: '0.79rem', display: 'inline-flex', alignItems: 'center', gap: '0.38rem' }}
+            >
+              <User size={15} />
+              <span>{authState?.user ? 'Orders' : 'Sign In'}</span>
+            </button>
             <button
               type="button"
               onClick={triggerInkSplashTheme}
@@ -636,6 +762,22 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {referralBanner && (
+          <div
+            style={{
+              borderTop: '1.5px solid var(--border)',
+              backgroundColor: 'var(--surface-mint)',
+              color: '#141417',
+              padding: '0.36rem 1rem',
+              textAlign: 'center',
+              fontSize: '0.77rem',
+              fontWeight: 700,
+            }}
+          >
+            Invited by {referralBanner.referrer_first_name}: 10% Friend Referral Discount applies automatically to your first order!
+          </div>
+        )}
 
         {/* LIVE DESIGN LAB DRAWER (Switch 4 New Layouts + 4 Emote/Badge Packs Instantly!) */}
         {designDockOpen && (
@@ -976,30 +1118,6 @@ export default function App() {
           </section>
         </div>
 
-        {/* NEO-POP KINETIC MARQUEE RIBBON */}
-        <div
-          style={{
-            borderTop: '2px solid var(--border)',
-            borderBottom: '2px solid var(--border)',
-            backgroundColor: 'var(--surface-butter)',
-            color: '#141417',
-            overflow: 'hidden',
-            padding: '0.52rem 0',
-          }}
-        >
-          <div className="pop-marquee-track font-neo" style={{ fontSize: '0.8rem', fontWeight: 800, letterSpacing: '0.05em' }}>
-            {Array(6)
-              .fill(
-                'INLINE GROCERY STEPPERS (+ / -)  •  0dB SILENT SQUISHIES  •  R188 CERAMIC SPINNERS  •  4-KEY CREAMY CLICKERS  •  TOUCH-TO-SING PLUSHIES  •  FREE US SHIPPING $65+  •  '
-              )
-              .map((txt, idx) => (
-                <span key={idx} style={{ paddingRight: '0.4rem' }}>
-                  {txt}
-                </span>
-              ))}
-          </div>
-        </div>
-
         {/* ===================================================================
             LAYOUT 1 (DEFAULT): CLAY-CLOUD × NEO-POP BENTO ARCADE
             =================================================================== */}
@@ -1200,9 +1318,27 @@ export default function App() {
                     <div>
                       <div className="font-display" style={{ fontSize: '1.28rem', fontWeight: 800 }}>
                         Build Your 3-Piece Desk &amp; Travel Calm Kit
+                        {bundleConfig?.active && (
+                          <span
+                            className="font-neo"
+                            style={{
+                              marginLeft: '0.55rem',
+                              padding: '0.15rem 0.52rem',
+                              borderRadius: '999px',
+                              backgroundColor: '#FFFFFF',
+                              border: '1.5px solid #141417',
+                              fontSize: '0.74rem',
+                              verticalAlign: 'middle',
+                            }}
+                          >
+                            {bagCount >= (bundleConfig.min_items || 3)
+                              ? `${bundleConfig.discount_pct || 12}% Bundle Unlocked!`
+                              : `Add ${(bundleConfig.min_items || 3) - bagCount} more for ${bundleConfig.discount_pct || 12}% Off`}
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: '0.84rem', opacity: 0.88 }}>
-                        Click <strong>+ Add</strong> on any stat-card below — orders $65+ unlock automatic Free US Shipping ({freeShipRemaining <= 0 ? 'Unlocked!' : `$${freeShipRemaining.toFixed(0)} away`}).
+                        Click <strong>+ Add</strong> on any card below — automatic {bundleConfig?.discount_pct || 12}% off 3+ items, Free US Shipping at $65+ ({freeShipRemaining <= 0 ? 'Unlocked!' : `$${freeShipRemaining.toFixed(0)} away`}), &amp; Give 10% / Get 10% Referrals.
                       </div>
                     </div>
                   </div>
@@ -1470,6 +1606,9 @@ export default function App() {
             <button type="button" onClick={() => { setLegalTab('cpsia'); setLegalOpen(true); }} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
               CPSC &amp; Wellness Info
             </button>
+            <button type="button" onClick={() => setAdminOpen(true)} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
+              Admin Login
+            </button>
           </div>
         </div>
       </footer>
@@ -1720,6 +1859,24 @@ export default function App() {
           </button>
         </div>
       )}
+
+      <CustomerAccountModal
+        open={accountOpen}
+        onClose={() => setAccountOpen(false)}
+        authState={authState}
+        onLogout={handleLogout}
+        onOpenAdmin={() => setAdminOpen(true)}
+        referralCodeFromUrl={referralCodeFromUrl}
+        vaultDiscountPct={vaultDiscountPct}
+        onApplyVaultDiscount={(pct) => setVaultDiscountPct(pct)}
+      />
+
+      <AdminConsoleModal
+        open={adminOpen}
+        onClose={() => setAdminOpen(false)}
+        authState={authState}
+        onCatalogRefresh={refreshCatalog}
+      />
 
       <LegalViews open={legalOpen} initialTab={legalTab} onClose={() => setLegalOpen(false)} />
     </div>

@@ -67,10 +67,10 @@ const PLUSH_SPOTS = [
 ];
 
 const SWITCH_KEYS = [
-  { id: 'mint', keyNum: '1', label: 'Thock', bg: '#A7F3D0', ink: '#065F46', fStart: 235, fEnd: 112, wave: 'triangle' },
-  { id: 'butter', keyNum: '2', label: 'Creamy', bg: '#FDE68A', ink: '#78350F', fStart: 315, fEnd: 152, wave: 'sine' },
+  { id: 'mint', keyNum: '1', label: 'Deep', bg: '#A7F3D0', ink: '#065F46', fStart: 235, fEnd: 112, wave: 'triangle' },
+  { id: 'butter', keyNum: '2', label: 'Smooth', bg: '#FDE68A', ink: '#78350F', fStart: 315, fEnd: 152, wave: 'sine' },
   { id: 'sky', keyNum: '3', label: 'Tactile', bg: '#BAE6FD', ink: '#075985', fStart: 430, fEnd: 198, wave: 'triangle' },
-  { id: 'coral', keyNum: '4', label: 'Clicky', bg: '#FECDD3', ink: '#881337', fStart: 690, fEnd: 285, wave: 'square' },
+  { id: 'coral', keyNum: '4', label: 'Crisp', bg: '#FECDD3', ink: '#881337', fStart: 690, fEnd: 285, wave: 'square' },
 ];
 
 export default function TactileFeelLab({ compactSidebar = false }) {
@@ -434,7 +434,7 @@ export default function TactileFeelLab({ compactSidebar = false }) {
                 fontWeight: 800,
               }}
             >
-              {clickCount > 0 ? `${clickCount} Clicks` : '38 dB Thock'}
+              {clickCount > 0 ? `${clickCount} Clicks` : '38 dB Crisp Click'}
             </span>
           </div>
 
