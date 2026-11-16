@@ -1700,24 +1700,26 @@ export default function App() {
         </div>
       )}
 
-      {/* FLOATING QUICK DESIGN SWITCHER PILL (Bottom-Left) */}
-      <div style={{ position: 'fixed', bottom: '1.1rem', left: '1.1rem', zIndex: 740 }}>
-        <button
-          type="button"
-          onClick={() => setDesignDockOpen((o) => !o)}
-          className="btn-ghost"
-          style={{
-            padding: '0.52rem 0.9rem',
-            fontSize: '0.78rem',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.42rem',
-          }}
-        >
-          <Sparkles size={14} style={{ color: 'var(--accent)' }} />
-          <span>4 Layouts &amp; 4 Emote Packs</span>
-        </button>
-      </div>
+      {/* FLOATING QUICK DESIGN SWITCHER PILL (Only shown in ?studio=1 preview mode) */}
+      {isStudioPreview && (
+        <div style={{ position: 'fixed', bottom: '1.1rem', left: '1.1rem', zIndex: 740 }}>
+          <button
+            type="button"
+            onClick={() => setDesignDockOpen((o) => !o)}
+            className="btn-ghost"
+            style={{
+              padding: '0.52rem 0.9rem',
+              fontSize: '0.78rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.42rem',
+            }}
+          >
+            <Sparkles size={14} style={{ color: 'var(--accent)' }} />
+            <span>4 Layouts &amp; 4 Emote Packs</span>
+          </button>
+        </div>
+      )}
 
       <LegalViews open={legalOpen} initialTab={legalTab} onClose={() => setLegalOpen(false)} />
     </div>
