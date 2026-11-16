@@ -658,7 +658,7 @@ export function AdminConsoleModal({ open, onClose, authState, onCatalogRefresh }
                       placeholder="SPRING20"
                       value={newPromoCode}
                       onChange={(e) => setNewPromoCode(e.target.value.toUpperCase())}
-                      style={{ padding: '0.48rem 0.65rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', width: '130px' }}
+                      style={{ padding: '0.48rem 0.65rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', width: '130px' }}
                     />
                   </div>
                   <div>
@@ -669,7 +669,7 @@ export function AdminConsoleModal({ open, onClose, authState, onCatalogRefresh }
                       max={30}
                       value={newPromoPct}
                       onChange={(e) => setNewPromoPct(e.target.value)}
-                      style={{ padding: '0.48rem 0.65rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', width: '110px' }}
+                      style={{ padding: '0.48rem 0.65rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', width: '110px' }}
                     />
                   </div>
                   <div>
@@ -680,7 +680,7 @@ export function AdminConsoleModal({ open, onClose, authState, onCatalogRefresh }
                       max={250}
                       value={newPromoMin}
                       onChange={(e) => setNewPromoMin(e.target.value)}
-                      style={{ padding: '0.48rem 0.65rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', width: '110px' }}
+                      style={{ padding: '0.48rem 0.65rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', width: '110px' }}
                     />
                   </div>
                   <button type="submit" className="btn-primary" style={{ padding: '0.52rem 0.9rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -828,7 +828,7 @@ export function AdminConsoleModal({ open, onClose, authState, onCatalogRefresh }
                       placeholder="partner@gmail.com"
                       value={coAdminInput}
                       onChange={(e) => setCoAdminInput(e.target.value)}
-                      style={{ padding: '0.48rem 0.7rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', minWidth: '220px' }}
+                      style={{ padding: '0.48rem 0.7rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', minWidth: '220px' }}
                     />
                     <button type="button" onClick={() => handleCoAdmin('add', coAdminInput)} className="btn-primary" style={{ padding: '0.48rem 0.85rem', fontSize: '0.78rem' }}>
                       Authorize Co-Admin
