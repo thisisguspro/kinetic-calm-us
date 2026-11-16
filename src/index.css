@@ -1,140 +1,76 @@
 /* ==========================================================================
-   KINETIC CALM — 4 REELVAULT-LEARNED DESIGN SYSTEMS + UNSLOP CSS POLISH
-   1. clay_cloud   : 3D Claymorphism + Soft Toy Cloud Pop (Default)
-   2. neo_pop      : Bold Pop-Art / Swiss Hard-Ink Offset Studio
-   3. aero_glass   : Frosted Glassmorphism + Pastel Aurora Mesh
-   4. nordic_quiet : Warm Scandinavian Editorial Gallery
+   KINETIC CALM V3 — CLAY & CLOUD WARMTH × NEO-POP EDITORIAL ARCHITECTURE
+   Combines Clay & Cloud's soft pastel breathing room with Neo-Pop's crisp
+   2px ink borders, tactile offset shadows, Space/Bricolage display type,
+   pinned 4-slide scroll showcase, and inline grocery quantity steppers.
    ========================================================================== */
 
-:root,
-[data-style='clay'] {
-  --bg: #FCF9F4;
+:root {
+  --bg: #FCF8F2;
   --bg-mesh:
-    radial-gradient(circle at 14% 10%, rgba(255, 206, 214, 0.36) 0%, transparent 38%),
-    radial-gradient(circle at 86% 16%, rgba(196, 241, 226, 0.42) 0%, transparent 40%);
+    radial-gradient(circle at 12% 8%, rgba(255, 205, 216, 0.42) 0%, transparent 36%),
+    radial-gradient(circle at 88% 12%, rgba(186, 243, 224, 0.46) 0%, transparent 38%),
+    radial-gradient(circle at 50% 62%, rgba(254, 240, 185, 0.34) 0%, transparent 44%);
   --surface: #FFFFFF;
-  --surface-muted: #F3EEE6;
-  --text: #1B2422;
-  --text-muted: #586561;
-  --accent: #1E7A62;
+  --surface-muted: #F6F0E6;
+  --surface-butter: #FFF3C4;
+  --surface-mint: #DCFCE7;
+  --surface-blush: #FFE4EC;
+  --surface-sky: #E0F2FE;
+  --ink: #141417;
+  --text: #141417;
+  --text-muted: #4A4D55;
+  --accent: #FF4D6D;
   --accent-contrast: #FFFFFF;
-  --accent-soft: #DFF5ED;
-  --blush: #E85D75;
-  --blush-soft: #FFE5EA;
-  --marshmallow-fill: #FFF3F6;
-  --marshmallow-stroke: #E85D75;
-  --border: rgba(27, 36, 34, 0.08);
-  --card-radius: 1.65rem;
-  --btn-radius: 999px;
-  --shadow-card:
-    inset 0 2px 4px rgba(255, 255, 255, 0.92),
-    0 16px 34px -14px rgba(30, 62, 52, 0.12),
-    0 4px 10px -3px rgba(30, 62, 52, 0.05);
-  --shadow-hover:
-    inset 0 2px 4px rgba(255, 255, 255, 0.95),
-    0 24px 42px -14px rgba(30, 62, 52, 0.18);
-  --card-border: 1.5px solid rgba(27, 36, 34, 0.07);
-  --font-display: 'Fredoka', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --accent-soft: #FFE0E7;
+  --mint-strong: #0D9488;
+  --mint-pill: #A7F3D0;
+  --butter-pill: #FDE68A;
+  --marshmallow-fill: #FFF0F4;
+  --marshmallow-stroke: #141417;
+  --border: #141417;
+  --border-subtle: rgba(20, 20, 23, 0.14);
+  --card-radius: 1.45rem;
+  --btn-radius: 0.9rem;
+  --card-border: 2px solid #141417;
+  --shadow-card: 5px 5px 0px #141417;
+  --shadow-hover: 8px 8px 0px #141417;
+  --shadow-btn: 3px 3px 0px #141417;
+  --shadow-btn-active: 1px 1px 0px #141417;
+  --font-display: 'Bricolage Grotesque', 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+  --font-mono-ui: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 }
 
-/* Style 2: Neo-Pop Swiss Studio (ReelVault Pop Art + Swiss Grid + Hallmark) */
-[data-style='pop'] {
-  --bg: #FFFDF6;
-  --bg-mesh: radial-gradient(#E5DEC9 1px, transparent 1px);
-  --surface: #FFFFFF;
-  --surface-muted: #FFF4CC;
-  --text: #141417;
-  --text-muted: #46464F;
-  --accent: #FF4D6D;
-  --accent-contrast: #FFFFFF;
-  --accent-soft: #FFE0E6;
-  --blush: #008B74;
-  --blush-soft: #D6F8F0;
-  --marshmallow-fill: #FFF0F3;
-  --marshmallow-stroke: #141417;
-  --border: #141417;
-  --card-radius: 1.15rem;
-  --btn-radius: 0.75rem;
-  --shadow-card: 4px 4px 0px #141417;
-  --shadow-hover: 7px 7px 0px #141417;
-  --card-border: 2px solid #141417;
-  --font-display: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
-  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
-}
-
-/* Style 3: Frosted Aero Glass (ReelVault Glassmorphism + MotionSites) */
-[data-style='glass'] {
-  --bg: #ECF5F9;
-  --bg-mesh:
-    radial-gradient(circle at 15% 15%, rgba(165, 243, 252, 0.58) 0%, transparent 42%),
-    radial-gradient(circle at 82% 18%, rgba(253, 205, 227, 0.52) 0%, transparent 40%),
-    radial-gradient(circle at 52% 78%, rgba(199, 210, 254, 0.45) 0%, transparent 45%);
-  --surface: rgba(255, 255, 255, 0.68);
-  --surface-muted: rgba(255, 255, 255, 0.52);
-  --text: #0F1E2E;
-  --text-muted: #475B70;
-  --accent: #0284C7;
-  --accent-contrast: #FFFFFF;
-  --accent-soft: rgba(2, 132, 199, 0.12);
-  --blush: #DB2777;
-  --blush-soft: rgba(219, 39, 119, 0.11);
-  --marshmallow-fill: rgba(255, 241, 246, 0.95);
-  --marshmallow-stroke: #DB2777;
-  --border: rgba(255, 255, 255, 0.85);
-  --card-radius: 1.5rem;
-  --btn-radius: 999px;
-  --shadow-card: 0 18px 40px -16px rgba(15, 42, 74, 0.12);
-  --shadow-hover: 0 24px 48px -14px rgba(15, 42, 74, 0.18);
-  --card-border: 1px solid rgba(255, 255, 255, 0.88);
-  --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
-  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
-}
-
-/* Style 4: Nordic Warm Minimal (ReelVault Minimalism + Editorial + Impeccable) */
-[data-style='nordic'] {
-  --bg: #F6F3EC;
-  --bg-mesh: none;
-  --surface: #FDFBF7;
-  --surface-muted: #EDE8DF;
-  --text: #1E1C1A;
-  --text-muted: #635D56;
-  --accent: #234237;
-  --accent-contrast: #FAF8F4;
-  --accent-soft: #E3EAE6;
-  --blush: #A6523B;
-  --blush-soft: #F3E5E0;
-  --marshmallow-fill: #FAF5F0;
-  --marshmallow-stroke: #A6523B;
-  --border: rgba(30, 28, 26, 0.11);
-  --card-radius: 0.65rem;
-  --btn-radius: 0.45rem;
-  --shadow-card: none;
-  --shadow-hover: 0 14px 28px -16px rgba(30, 28, 26, 0.14);
-  --card-border: 1px solid rgba(30, 28, 26, 0.11);
-  --font-display: 'Fraunces', Georgia, serif;
-  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
-}
-
 [data-theme='dark'] {
-  --bg: #0D1317;
+  --bg: #0F141A;
   --bg-mesh:
-    radial-gradient(circle at 18% 12%, rgba(45, 212, 191, 0.12) 0%, transparent 38%),
-    radial-gradient(circle at 82% 16%, rgba(244, 114, 182, 0.10) 0%, transparent 36%);
-  --surface: #151E24;
-  --surface-muted: #1D2930;
-  --text: #F2F7F6;
-  --text-muted: #9BAEB0;
-  --accent: #34D399;
-  --accent-contrast: #062118;
-  --accent-soft: rgba(52, 211, 153, 0.15);
-  --blush: #FB7185;
-  --blush-soft: rgba(251, 113, 133, 0.15);
-  --marshmallow-fill: #2A2028;
-  --marshmallow-stroke: #FB7185;
-  --border: rgba(242, 247, 246, 0.12);
-  --card-border: 1px solid rgba(242, 247, 246, 0.12);
-  --shadow-card: 0 18px 36px -14px rgba(0, 0, 0, 0.5);
+    radial-gradient(circle at 16% 10%, rgba(45, 212, 191, 0.15) 0%, transparent 38%),
+    radial-gradient(circle at 84% 14%, rgba(255, 77, 109, 0.15) 0%, transparent 36%);
+  --surface: #182029;
+  --surface-muted: #212B37;
+  --surface-butter: #2E2918;
+  --surface-mint: #132C28;
+  --surface-blush: #301B24;
+  --surface-sky: #152838;
+  --ink: #F8FAFC;
+  --text: #F8FAFC;
+  --text-muted: #A9B6C5;
+  --accent: #FF5C7A;
+  --accent-contrast: #FFFFFF;
+  --accent-soft: rgba(255, 92, 122, 0.2);
+  --mint-strong: #2DD4BF;
+  --mint-pill: #134E4A;
+  --butter-pill: #423310;
+  --marshmallow-fill: #35202A;
+  --marshmallow-stroke: #F8FAFC;
+  --border: #384657;
+  --border-subtle: rgba(248, 250, 252, 0.16);
+  --card-border: 2px solid #475569;
+  --shadow-card: 5px 5px 0px #06090D;
+  --shadow-hover: 8px 8px 0px #06090D;
+  --shadow-btn: 3px 3px 0px #06090D;
+  --shadow-btn-active: 1px 1px 0px #06090D;
 }
 
 *,
@@ -154,17 +90,12 @@ body {
   background-image: var(--bg-mesh);
   color: var(--text);
   font-family: var(--font-sans);
-  line-height: 1.55;
+  line-height: 1.5;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-[data-style='pop'][data-theme='light'] body {
-  background-size: 22px 22px;
-}
-
-/* Jakub Krehel make-interfaces-feel-better Typography Polish */
 h1,
 h2,
 h3,
@@ -182,14 +113,19 @@ p {
 
 .font-display {
   font-family: var(--font-display);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+}
+
+.font-neo {
+  font-family: var(--font-mono-ui);
+  letter-spacing: -0.01em;
 }
 
 /* Ink-Splash Radial Theme Transition */
 @keyframes inkSplashExpand {
   0% {
     clip-path: circle(0% at var(--splash-x, 50%) var(--splash-y, 50%));
-    opacity: 0.85;
+    opacity: 0.88;
   }
   70% {
     clip-path: circle(155% at var(--splash-x, 50%) var(--splash-y, 50%));
@@ -206,31 +142,11 @@ p {
   inset: 0;
   pointer-events: none;
   z-index: 999;
-  background: radial-gradient(circle at var(--splash-x, 50%) var(--splash-y, 50%), var(--splash-color, #34D399), var(--bg));
+  background: radial-gradient(circle at var(--splash-x, 50%) var(--splash-y, 50%), var(--splash-color, #FF4D6D), var(--bg));
   animation: inkSplashExpand 640ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-/* Gooey Spring Cart Toast */
-@keyframes gooeySpringIn {
-  0% {
-    opacity: 0;
-    transform: translateY(16px) scale(0.9, 1.08);
-  }
-  60% {
-    opacity: 1;
-    transform: translateY(-3px) scale(1.02, 0.98);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1, 1);
-  }
-}
-
-.gooey-toast {
-  animation: gooeySpringIn 400ms cubic-bezier(0.22, 1.35, 0.36, 1) forwards;
-}
-
-/* Marquee Ticker for Neo-Pop Style */
+/* Marquee Ticker */
 @keyframes marqueeSlide {
   0% {
     transform: translateX(0%);
@@ -243,29 +159,49 @@ p {
 .pop-marquee-track {
   display: flex;
   width: max-content;
-  animation: marqueeSlide 24s linear infinite;
+  animation: marqueeSlide 26s linear infinite;
 }
 
-/* Slow Rebound Viscous Recovery Curve */
+.pop-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+/* Viscous Slow-Rise Recovery */
 .squish-elastic {
-  transition: transform 0.16s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition: transform 0.14s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .squish-elastic.rebounding {
-  transition: transform 2.8s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 3.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Floating musical note animation */
+@keyframes floatNoteUp {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.75) rotate(-8deg);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-42px) scale(1.15) rotate(12deg);
+  }
+}
+
+.musical-ripple-note {
+  animation: floatNoteUp 820ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  pointer-events: none;
+}
+
+/* Neo-Pop × Clay-Cloud Surface Card */
 .surface-card {
   background: var(--surface);
   border: var(--card-border);
   box-shadow: var(--shadow-card);
   border-radius: var(--card-radius);
-  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s ease, border-color 0.2s ease;
-}
-
-[data-style='glass'] .surface-card {
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease, background-color 0.25s ease;
 }
 
 .product-card {
@@ -273,7 +209,7 @@ p {
 }
 
 .product-card:hover {
-  transform: translateY(-4px);
+  transform: translate(-2px, -3px);
   box-shadow: var(--shadow-hover);
 }
 
@@ -282,56 +218,150 @@ p {
 }
 
 .product-card:hover .product-img-zoom {
-  transform: scale(1.045);
+  transform: scale(1.055);
 }
 
+/* Tactile Neo-Pop Primary & Ghost Buttons */
 .btn-primary {
   background: var(--accent);
   color: var(--accent-contrast);
-  border: none;
+  border: 2px solid var(--border);
+  box-shadow: var(--shadow-btn);
   border-radius: var(--btn-radius);
-  font-family: var(--font-sans);
+  font-family: var(--font-mono-ui);
   font-weight: 700;
   cursor: pointer;
-  transition: transform 0.15s cubic-bezier(0.22, 1.35, 0.36, 1), opacity 0.2s ease, box-shadow 0.15s ease;
-}
-
-[data-style='pop'] .btn-primary {
-  border: 2px solid #141417;
-  box-shadow: 3px 3px 0px #141417;
-}
-
-[data-style='pop'] .btn-primary:active {
-  transform: translate(2px, 2px);
-  box-shadow: 1px 1px 0px #141417;
+  transition: transform 0.12s cubic-bezier(0.22, 1.35, 0.36, 1), box-shadow 0.12s ease, background-color 0.15s ease;
 }
 
 .btn-primary:hover {
-  opacity: 0.94;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px var(--border);
 }
 
 .btn-primary:active {
-  transform: scale(0.96);
+  transform: translate(2px, 2px);
+  box-shadow: var(--shadow-btn-active);
 }
 
 .btn-ghost {
-  background: var(--surface-muted);
+  background: var(--surface);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
+  box-shadow: var(--shadow-btn);
   border-radius: var(--btn-radius);
-  font-family: var(--font-sans);
-  font-weight: 600;
+  font-family: var(--font-mono-ui);
+  font-weight: 700;
   cursor: pointer;
-  transition: transform 0.15s ease, border-color 0.2s ease, background-color 0.2s ease;
-}
-
-[data-style='pop'] .btn-ghost {
-  background: #FFFFFF;
-  border: 2px solid #141417;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.15s ease;
 }
 
 .btn-ghost:hover {
-  border-color: var(--accent);
+  background: var(--surface-butter);
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px var(--border);
+}
+
+.btn-ghost:active {
+  transform: translate(2px, 2px);
+  box-shadow: var(--shadow-btn-active);
+}
+
+/* Inline Grocery Stepper Pill */
+@keyframes stepperPop {
+  0% {
+    transform: scale(0.88);
+  }
+  65% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.grocery-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  background: var(--mint-pill);
+  color: #0F172A;
+  border: 2px solid var(--border);
+  box-shadow: var(--shadow-btn);
+  border-radius: var(--btn-radius);
+  padding: 0.18rem 0.26rem;
+  animation: stepperPop 200ms cubic-bezier(0.22, 1.35, 0.36, 1);
+}
+
+[data-theme='dark'] .grocery-stepper {
+  background: #14B8A6;
+  color: #042F2E;
+}
+
+.grocery-step-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 0.6rem;
+  border: 1.5px solid #141417;
+  background: #FFFFFF;
+  color: #141417;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s ease, background-color 0.12s ease;
+}
+
+.grocery-step-btn:hover {
+  background: #FFF3C4;
+}
+
+.grocery-step-btn:active {
+  transform: scale(0.9);
+}
+
+/* Horizontal Category Swimlanes */
+.swimlane-scroll {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(272px, 296px);
+  gap: 1.15rem;
+  overflow-x: auto;
+  padding: 0.35rem 0.25rem 1rem;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+}
+
+.swimlane-scroll > * {
+  scroll-snap-align: start;
+}
+
+/* Responsive Pinned Hero Grid */
+.pinned-hero-grid {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: clamp(1.2rem, 3vw, 2.6rem);
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .pinned-hero-grid {
+    grid-template-columns: 1fr;
+  }
+  .split-lookbook-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .split-sticky-sidebar {
+    position: static !important;
+  }
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

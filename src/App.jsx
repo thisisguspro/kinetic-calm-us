@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ShoppingBag,
   Sun,
@@ -9,131 +9,108 @@ import {
   X,
   CheckCircle2,
   Lock,
-  ChevronLeft,
-  ChevronRight,
-  Palette,
+  ArrowDown,
+  SlidersHorizontal,
+  Sparkles,
+  PackageCheck,
 } from 'lucide-react';
 import TactileFeelLab from './TactileFeelLab.jsx';
 import LegalViews from './LegalViews.jsx';
+import {
+  EMOTE_PACK_OPTIONS,
+  SensoryStatCluster,
+  GroceryQtyStepper,
+  classifySoundProfile,
+} from './SensoryMetersAndQty.jsx';
 
-const STYLE_PRESETS = [
-  { id: 'clay', name: '1. Clay & Cloud', note: 'Soft 3D Toy Boutique' },
-  { id: 'pop', name: '2. Neo-Pop Editorial', note: 'Crisp Ink & Marquee' },
-  { id: 'glass', name: '3. Frosted Aero Glass', note: 'Aurora Glass Carousel' },
-  { id: 'nordic', name: '4. Nordic Quiet Gallery', note: 'Warm Editorial Serif' },
+const LAYOUT_OPTIONS = [
+  {
+    id: 'bento_arcade',
+    name: 'Layout 1: Clay-Cloud × Neo-Pop Bento',
+    note: 'Pinned 4-Item Scroll Hero + Spotlight Bento + Play Lab + Bundle Bar',
+  },
+  {
+    id: 'split_shelf',
+    name: 'Layout 2: Sticky Mood-Finder Split Shelf',
+    note: 'Pinned Hero + Left Sticky Sensory Mood & Sound Filter + 2-Up Shelf',
+  },
+  {
+    id: 'category_lanes',
+    name: 'Layout 3: Tactile Category Swimlanes',
+    note: 'Pinned Hero + Full Soundstage + Horizontal Category Reel Lanes',
+  },
+  {
+    id: 'stat_deck',
+    name: 'Layout 4: Collectible Stat-Card & Bundle Deck',
+    note: 'Pinned Hero + Live 3-Slot Bundle Builder + Full Sensory Spec Cards',
+  },
 ];
 
 const COLLECTIONS = [
-  { id: 'all', label: 'All Toys' },
-  { id: 'squishies_calm', label: 'Squishies' },
-  { id: 'fidget_spinners', label: 'Spinners' },
-  { id: 'clickers_sliders', label: 'Clickers' },
+  { id: 'all', label: 'All 12 Toys' },
+  { id: 'squishies_calm', label: 'Slow-Rise Squishies' },
+  { id: 'fidget_spinners', label: 'R188 Spinners' },
+  { id: 'clickers_sliders', label: 'Creamy Clickers' },
   { id: 'musical_plush', label: 'Musical Plush' },
 ];
 
-/**
- * Custom SVG Happy Marshmallow Icon for Softness / Squishiness Meter (1..5)
- */
-function HappyMarshmallowIcon({ filled, size = 20 }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      style={{
-        opacity: filled ? 1 : 0.25,
-        transform: filled ? 'scale(1)' : 'scale(0.92)',
-        transition: 'transform 0.18s ease, opacity 0.18s ease',
-        flexShrink: 0,
-      }}
-    >
-      {/* Plump marshmallow pillow body */}
-      <rect
-        x="3"
-        y="4.5"
-        width="18"
-        height="15.5"
-        rx="6.5"
-        fill={filled ? 'var(--marshmallow-fill)' : 'transparent'}
-        stroke="var(--marshmallow-stroke)"
-        strokeWidth="1.75"
-      />
-      {/* Soft marshmallow top crown line */}
-      <path
-        d="M6.8 7.6 C9.5 6.5, 14.5 6.5, 17.2 7.6"
-        fill="none"
-        stroke="var(--marshmallow-stroke)"
-        strokeWidth="1.1"
-        strokeLinecap="round"
-        opacity="0.45"
-      />
-      {/* Happy curved eyes */}
-      <path d="M8.2 12.2 Q9.2 10.9 10.2 12.2" fill="none" stroke="var(--text)" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M13.8 12.2 Q14.8 10.9 15.8 12.2" fill="none" stroke="var(--text)" strokeWidth="1.5" strokeLinecap="round" />
-      {/* Rosy marshmallow cheeks */}
-      {filled && (
-        <>
-          <circle cx="7.4" cy="14.1" r="1.35" fill="#FB7185" opacity="0.65" />
-          <circle cx="16.6" cy="14.1" r="1.35" fill="#FB7185" opacity="0.65" />
-        </>
-      )}
-      {/* Tiny happy smile */}
-      <path d="M10.4 14.1 Q12 15.8 13.6 14.1" fill="none" stroke="var(--text)" strokeWidth="1.45" strokeLinecap="round" />
-    </svg>
-  );
-}
+const SOUND_FILTERS = [
+  { id: 'all', label: 'Any Sound' },
+  { id: 'silent', label: '0 dB Library Silent' },
+  { id: 'click', label: 'Satisfying Click / Thock' },
+  { id: 'melody', label: 'Plays Music' },
+];
 
-function MarshmallowMeter({ level = 5, label = '', size = 19 }) {
-  const safe = Math.max(1, Math.min(5, Number(level) || 3));
-  return (
-    <div
-      title={`Softness: ${safe}/5 Happy Marshmallows (${label})`}
-      aria-label={`Softness ${safe} out of 5 marshmallows`}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-    >
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <HappyMarshmallowIcon key={n} filled={n <= safe} size={size} />
-        ))}
-      </span>
-      {label && (
-        <span style={{ fontSize: '0.73rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-          {label}
-        </span>
-      )}
-    </div>
-  );
-}
-
-/**
- * Yelp-Style Price Tier ($ / $$ / $$$) + Calm Feel Score Dots
- */
-function YelpPriceSigns({ tier = 2 }) {
-  const active = Math.max(1, Math.min(3, Number(tier) || 2));
-  return (
-    <span
-      title={`Price tier: ${'$'.repeat(active)}`}
-      aria-label={`Price tier ${active} of 3`}
-      style={{ fontSize: '0.8rem', fontWeight: 800, letterSpacing: '0.02em' }}
-    >
-      <span style={{ color: 'var(--accent)' }}>{'$'.repeat(active)}</span>
-      <span style={{ color: 'var(--text-muted)', opacity: 0.28 }}>{'$'.repeat(3 - active)}</span>
-    </span>
-  );
-}
+const HERO_SLIDE_THEMES = [
+  {
+    badge: '01 / 04 • TOUCH-TO-SING FAVORITE',
+    cardBg: 'linear-gradient(135deg, #FFF7E8 0%, #FFE4EC 100%)',
+    stageGlow: 'rgba(255, 77, 109, 0.14)',
+    accentPill: '#FFE0E7',
+  },
+  {
+    badge: '02 / 04 • 3.6s VISCOUS MOCHI REBOUND',
+    cardBg: 'linear-gradient(135deg, #FFF0F5 0%, #FCE7F3 100%)',
+    stageGlow: 'rgba(244, 114, 182, 0.15)',
+    accentPill: '#FCE7F3',
+  },
+  {
+    badge: '03 / 04 • 3+ MIN R188 CERAMIC SPIN',
+    cardBg: 'linear-gradient(135deg, #ECFEFF 0%, #DCFCE7 100%)',
+    stageGlow: 'rgba(13, 148, 136, 0.14)',
+    accentPill: '#DCFCE7',
+  },
+  {
+    badge: '04 / 04 • 4 CUSTOM KEYBOARD SWITCHES',
+    cardBg: 'linear-gradient(135deg, #FEF9C3 0%, #E0E7FF 100%)',
+    stageGlow: 'rgba(245, 158, 11, 0.15)',
+    accentPill: '#FEF3C7',
+  },
+];
 
 export default function App() {
-  const [stylePreset, setStylePreset] = useState(() => {
+  const [layoutMode, setLayoutMode] = useState(() => {
     if (typeof window !== 'undefined') {
-      const q = new URLSearchParams(window.location.search).get('style');
-      if (q && ['clay', 'pop', 'glass', 'nordic'].includes(q)) return q;
+      const q = new URLSearchParams(window.location.search).get('layout');
+      if (q && LAYOUT_OPTIONS.some((l) => l.id === q)) return q;
       try {
-        const saved = localStorage.getItem('kc_style_preset');
-        if (saved && ['clay', 'pop', 'glass', 'nordic'].includes(saved)) return saved;
+        const saved = localStorage.getItem('kc_layout_v3');
+        if (saved && LAYOUT_OPTIONS.some((l) => l.id === saved)) return saved;
       } catch {}
     }
-    return 'clay';
+    return 'bento_arcade';
+  });
+
+  const [emotePack, setEmotePack] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const q = new URLSearchParams(window.location.search).get('emotes');
+      if (q && EMOTE_PACK_OPTIONS.some((e) => e.id === q)) return q;
+      try {
+        const saved = localStorage.getItem('kc_emote_pack_v3');
+        if (saved && EMOTE_PACK_OPTIONS.some((e) => e.id === saved)) return saved;
+      } catch {}
+    }
+    return 'mochi_chime';
   });
 
   const [theme, setTheme] = useState(() => {
@@ -145,11 +122,17 @@ export default function App() {
   });
 
   const [splashState, setSplashState] = useState(null);
+  const [designDockOpen, setDesignDockOpen] = useState(false);
+
+  // Pinned 4-Slide Scroll Showcase State
+  const heroTrackRef = useRef(null);
   const [heroIdx, setHeroIdx] = useState(0);
-  const [styleDockOpen, setStyleDockOpen] = useState(false);
+  const [heroScrollPct, setHeroScrollPct] = useState(0);
+  const [cardTilt, setCardTilt] = useState({ rx: 0, ry: 0 });
 
   const [catalog, setCatalog] = useState([]);
   const [activeCollection, setActiveCollection] = useState('all');
+  const [soundFilter, setSoundFilter] = useState('all');
   const [selectedProduct, setSelectedProduct] = useState(null);
 
   const [bag, setBag] = useState(() => {
@@ -162,7 +145,7 @@ export default function App() {
   });
   const [bagOpen, setBagOpen] = useState(false);
   const [promoCode, setPromoCode] = useState('');
-  const [vaultDiscountPct, setVaultDiscountPct] = useState(0);
+  const [vaultDiscountPct] = useState(0);
   const [quote, setQuote] = useState(null);
   const [checkoutStatus, setCheckoutStatus] = useState('');
   const [toastMsg, setToastMsg] = useState('');
@@ -174,11 +157,16 @@ export default function App() {
   const [newsletterMsg, setNewsletterMsg] = useState('');
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-style', stylePreset);
     try {
-      localStorage.setItem('kc_style_preset', stylePreset);
+      localStorage.setItem('kc_layout_v3', layoutMode);
     } catch {}
-  }, [stylePreset]);
+  }, [layoutMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('kc_emote_pack_v3', emotePack);
+    } catch {}
+  }, [emotePack]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -198,7 +186,7 @@ export default function App() {
       if (e.key === 'Escape') {
         setSelectedProduct(null);
         setBagOpen(false);
-        setStyleDockOpen(false);
+        setDesignDockOpen(false);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -213,6 +201,37 @@ export default function App() {
       })
       .catch(() => {});
   }, []);
+
+  // Scroll-Driven Pinned 4-Item Top Carousel Listener
+  useEffect(() => {
+    const handleScroll = () => {
+      const el = heroTrackRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const scrollable = Math.max(1, el.offsetHeight - window.innerHeight);
+      const scrolled = Math.min(scrollable, Math.max(0, -rect.top));
+      const pct = scrolled / scrollable;
+      setHeroScrollPct(pct);
+      const nextSlide = Math.min(3, Math.max(0, Math.floor(pct * 3.999)));
+      setHeroIdx((prev) => (prev === nextSlide ? prev : nextSlide));
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const jumpToHeroSlide = (targetIdx) => {
+    const el = heroTrackRef.current;
+    if (!el) {
+      setHeroIdx(targetIdx);
+      return;
+    }
+    const scrollable = Math.max(1, el.offsetHeight - window.innerHeight);
+    const trackTop = el.getBoundingClientRect().top + window.scrollY;
+    const targetY = trackTop + (targetIdx / 3.95) * scrollable + 6;
+    window.scrollTo({ top: targetY, behavior: 'smooth' });
+    setHeroIdx(targetIdx);
+  };
 
   useEffect(() => {
     if (!bag.length) {
@@ -241,7 +260,7 @@ export default function App() {
     setSplashState({
       x: xPct,
       y: yPct,
-      color: nextTheme === 'dark' ? '#0D1317' : '#FCF9F4',
+      color: nextTheme === 'dark' ? '#0F141A' : '#FCF8F2',
       key: Date.now(),
     });
     setTheme(nextTheme);
@@ -250,7 +269,7 @@ export default function App() {
 
   const addToBag = (item, e) => {
     if (e) e.stopPropagation();
-    if (item.track !== 'TRACK_A_DIRECT') return;
+    if (!item || item.track !== 'TRACK_A_DIRECT') return;
     setBag((prev) => {
       const idx = prev.findIndex((p) => p.id === item.id);
       if (idx >= 0) {
@@ -258,34 +277,52 @@ export default function App() {
         next[idx] = { ...next[idx], quantity: Math.min(20, next[idx].quantity + 1) };
         return next;
       }
-      return [...prev, { id: item.id, name: item.name, price_usd: item.price_usd, image_url: item.image_url, quantity: 1 }];
+      return [
+        ...prev,
+        { id: item.id, name: item.name, price_usd: item.price_usd, image_url: item.image_url, quantity: 1 },
+      ];
     });
     setCheckoutStatus('');
     setToastMsg(`Added ${item.name}`);
-    setTimeout(() => setToastMsg(''), 2400);
+    setTimeout(() => setToastMsg(''), 1900);
   };
 
   const updateBagQty = (id, delta) => {
     setBag((prev) =>
       prev
-        .map((p) => (p.id === id ? { ...p, quantity: p.quantity + delta } : p))
+        .map((p) => (p.id === id ? { ...p, quantity: Math.min(20, p.quantity + delta) } : p))
         .filter((p) => p.quantity > 0)
     );
   };
 
   const bagCount = useMemo(() => bag.reduce((s, i) => s + i.quantity, 0), [bag]);
+  const bagSubtotal = useMemo(() => bag.reduce((s, i) => s + Number(i.price_usd) * i.quantity, 0), [bag]);
+  const freeShipRemaining = Math.max(0, 65 - bagSubtotal);
+
   const filteredItems = useMemo(() => {
-    if (activeCollection === 'all') return catalog;
-    return catalog.filter((item) => item.collection === activeCollection);
-  }, [catalog, activeCollection]);
+    return catalog.filter((item) => {
+      if (activeCollection !== 'all' && item.collection !== activeCollection) return false;
+      if (soundFilter !== 'all') {
+        const sp = classifySoundProfile(item);
+        if (sp.kind !== soundFilter) return false;
+      }
+      return true;
+    });
+  }, [catalog, activeCollection, soundFilter]);
 
   const heroItems = useMemo(() => {
     if (!catalog.length) return [];
-    const wanted = ['SH-MUSICAL-FRUIT-TRIO', 'SH-TABA-CAT-PAW', 'SH-GYRO-RING-SPINNER', 'SH-4KEY-CREAMY-CLICKER'];
+    const wanted = [
+      'SH-MUSICAL-FRUIT-TRIO',
+      'SH-TABA-CAT-PAW',
+      'SH-GYRO-RING-SPINNER',
+      'SH-4KEY-CREAMY-CLICKER',
+    ];
     return wanted.map((id) => catalog.find((c) => c.id === id)).filter(Boolean);
   }, [catalog]);
 
-  const featuredHero = heroItems[heroIdx % Math.max(1, heroItems.length)] || catalog[0] || null;
+  const activeHero = heroItems[heroIdx % Math.max(1, heroItems.length)] || catalog[0] || null;
+  const activeHeroTheme = HERO_SLIDE_THEMES[heroIdx % HERO_SLIDE_THEMES.length];
 
   const handleCheckout = async () => {
     setCheckoutStatus('');
@@ -324,6 +361,125 @@ export default function App() {
     }
   };
 
+  const renderProductCard = (item, featuredWide = false, fullSpecHeader = false) => {
+    const sound = classifySoundProfile(item);
+    return (
+      <article
+        key={item.id}
+        onClick={() => setSelectedProduct(item)}
+        className="surface-card product-card"
+        style={{
+          padding: '1rem',
+          gridColumn: featuredWide ? 'span 2' : undefined,
+          display: featuredWide ? 'grid' : 'flex',
+          gridTemplateColumns: featuredWide ? 'repeat(auto-fit, minmax(220px, 1fr))' : undefined,
+          flexDirection: featuredWide ? undefined : 'column',
+          justifyContent: 'space-between',
+          gap: featuredWide ? '1.25rem' : '0.8rem',
+          alignItems: featuredWide ? 'center' : 'stretch',
+        }}
+      >
+        <div
+          style={{
+            backgroundColor: 'var(--surface-muted)',
+            borderRadius: '1.05rem',
+            border: '2px solid var(--border)',
+            aspectRatio: featuredWide ? '16 / 12' : '1 / 1',
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          <img
+            src={item.image_url}
+            alt={item.name}
+            loading="lazy"
+            className="product-img-zoom"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+          <span
+            className="font-neo"
+            style={{
+              position: 'absolute',
+              top: '0.6rem',
+              left: '0.6rem',
+              padding: '0.2rem 0.6rem',
+              borderRadius: '999px',
+              backgroundColor: '#FFF3C4',
+              color: '#141417',
+              border: '1.8px solid #141417',
+              fontSize: '0.69rem',
+              fontWeight: 800,
+              boxShadow: '2px 2px 0px #141417',
+            }}
+          >
+            {item.vibe_chip}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem', flex: 1 }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+              <h3 className="font-display" style={{ margin: 0, fontSize: featuredWide ? '1.35rem' : '1.08rem', fontWeight: 800, lineHeight: 1.2 }}>
+                {item.name}
+              </h3>
+              <span
+                className="tabular-nums font-neo"
+                style={{
+                  fontWeight: 800,
+                  fontSize: featuredWide ? '1.25rem' : '1.08rem',
+                  flexShrink: 0,
+                  padding: '0.1rem 0.48rem',
+                  borderRadius: '0.5rem',
+                  backgroundColor: 'var(--surface-muted)',
+                  border: '1.5px solid var(--border)',
+                }}
+              >
+                ${Number(item.price_usd).toFixed(0)}
+              </span>
+            </div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.22rem' }}>
+              {featuredWide ? item.short_tagline : item.subtitle}
+            </div>
+
+            {fullSpecHeader && (
+              <div
+                style={{
+                  marginTop: '0.6rem',
+                  padding: '0.5rem 0.65rem',
+                  borderRadius: '0.75rem',
+                  backgroundColor: 'var(--surface-muted)',
+                  border: '1.5px solid var(--border-subtle)',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '0.35rem',
+                  fontSize: '0.72rem',
+                }}
+              >
+                <div><strong>Feel:</strong> {item.squish_label}</div>
+                <div><strong>Audio:</strong> {sound.shortLabel}</div>
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              paddingTop: '0.68rem',
+              borderTop: '1.5px dashed var(--border-subtle)',
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '0.55rem',
+            }}
+          >
+            <SensoryStatCluster item={item} emotePack={emotePack} compact={!featuredWide} />
+            <GroceryQtyStepper item={item} bag={bag} onAdd={addToBag} onUpdateQty={updateBagQty} />
+          </div>
+        </div>
+      </article>
+    );
+  };
+
   return (
     <div style={{ minHeight: '100vh', position: 'relative' }}>
       {splashState && (
@@ -338,566 +494,765 @@ export default function App() {
         />
       )}
 
-      {/* Subtle Spring Toast */}
+      {/* Subtle Toast */}
       {toastMsg && (
         <div
           role="status"
-          className="gooey-toast"
+          className="font-neo"
           style={{
             position: 'fixed',
-            bottom: '1.4rem',
-            right: '1.4rem',
-            zIndex: 750,
-            backgroundColor: 'var(--accent)',
-            color: 'var(--accent-contrast)',
-            padding: '0.72rem 1.1rem',
-            borderRadius: '999px',
-            fontWeight: 700,
-            fontSize: '0.86rem',
-            boxShadow: '0 12px 28px rgba(0,0,0,0.2)',
+            top: '5rem',
+            right: '1.25rem',
+            zIndex: 760,
+            backgroundColor: '#A7F3D0',
+            color: '#064E3B',
+            border: '2px solid #141417',
+            boxShadow: '4px 4px 0px #141417',
+            padding: '0.58rem 0.95rem',
+            borderRadius: '0.85rem',
+            fontWeight: 800,
+            fontSize: '0.82rem',
             display: 'flex',
             alignItems: 'center',
             gap: '0.45rem',
           }}
         >
-          <CheckCircle2 size={16} />
+          <CheckCircle2 size={15} />
           <span>{toastMsg}</span>
         </div>
       )}
 
-      {/* Clean, Breathable Header (Zero Clutter!) */}
+      {/* NEO-POP × CLAY-CLOUD STICKY HEADER */}
       <header
         style={{
           position: 'sticky',
-          top: stylePreset === 'glass' ? '12px' : 0,
-          zIndex: 500,
-          maxWidth: stylePreset === 'glass' ? '1180px' : 'none',
-          margin: stylePreset === 'glass' ? '0 auto' : 0,
-          padding: stylePreset === 'glass' ? '0 1rem' : 0,
+          top: 0,
+          zIndex: 520,
+          backgroundColor: theme === 'dark' ? 'rgba(15, 20, 26, 0.92)' : 'rgba(252, 248, 242, 0.94)',
+          backdropFilter: 'blur(14px)',
+          WebkitBackdropFilter: 'blur(14px)',
+          borderBottom: '2px solid var(--border)',
         }}
       >
         <div
           style={{
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            backgroundColor:
-              theme === 'dark'
-                ? 'rgba(13, 19, 23, 0.86)'
-                : stylePreset === 'glass'
-                ? 'rgba(255, 255, 255, 0.72)'
-                : 'rgba(252, 249, 244, 0.90)',
-            borderBottom: stylePreset === 'glass' ? 'none' : '1px solid var(--border)',
-            border: stylePreset === 'glass' ? '1px solid rgba(255,255,255,0.88)' : undefined,
-            borderRadius: stylePreset === 'glass' ? '999px' : 0,
-            boxShadow: stylePreset === 'glass' ? '0 10px 30px -12px rgba(15, 42, 74, 0.12)' : 'none',
+            maxWidth: '1260px',
+            margin: '0 auto',
+            padding: '0.72rem 1.25rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '0.75rem',
           }}
         >
-          <div
+          <a
+            href="#"
             style={{
-              maxWidth: '1220px',
-              margin: '0 auto',
-              padding: '0.85rem 1.35rem',
-              display: 'flex',
-              justifyContent: 'space-between',
+              textDecoration: 'none',
+              color: 'var(--text)',
+              display: 'inline-flex',
               alignItems: 'center',
-              gap: '1rem',
+              gap: '0.6rem',
             }}
           >
-            <a
-              href="#"
+            <span
+              className="font-neo"
               style={{
-                textDecoration: 'none',
-                color: 'var(--text)',
+                width: '36px',
+                height: '36px',
+                borderRadius: '0.75rem',
+                backgroundColor: 'var(--accent)',
+                color: '#FFFFFF',
+                border: '2px solid var(--border)',
+                boxShadow: '2px 2px 0px var(--border)',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '0.6rem',
+                justifyContent: 'center',
+                fontWeight: 800,
+                fontSize: '0.88rem',
               }}
             >
-              <span
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: stylePreset === 'nordic' ? '6px' : '10px',
-                  backgroundColor: 'var(--accent)',
-                  color: 'var(--accent-contrast)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 800,
-                  fontSize: '0.85rem',
-                }}
-              >
-                KC
-              </span>
-              <span className="font-display" style={{ fontSize: '1.22rem', fontWeight: 700 }}>
-                Kinetic Calm
-              </span>
+              KC
+            </span>
+            <span className="font-display" style={{ fontSize: '1.3rem', fontWeight: 800 }}>
+              Kinetic Calm
+            </span>
+          </a>
+
+          <nav aria-label="Main navigation" style={{ display: 'flex', alignItems: 'center', gap: '1.1rem' }}>
+            <a href="#feel-lab" className="font-neo" style={{ textDecoration: 'none', color: 'var(--text)', fontWeight: 700, fontSize: '0.88rem' }}>
+              Play Lab
             </a>
+            <a href="#collection" className="font-neo" style={{ textDecoration: 'none', color: 'var(--text)', fontWeight: 700, fontSize: '0.88rem' }}>
+              Shop ({catalog.length || 12})
+            </a>
+            <button
+              type="button"
+              onClick={() => setDesignDockOpen((o) => !o)}
+              className="btn-ghost"
+              style={{ padding: '0.38rem 0.75rem', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            >
+              <SlidersHorizontal size={13} />
+              <span>Layouts &amp; Emotes</span>
+            </button>
+          </nav>
 
-            <nav aria-label="Main navigation" style={{ display: 'flex', alignItems: 'center', gap: '1.35rem' }}>
-              <a href="#collection" style={{ textDecoration: 'none', color: 'var(--text)', fontWeight: 600, fontSize: '0.9rem' }}>
-                Shop
-              </a>
-              <a href="#feel-lab" style={{ textDecoration: 'none', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.9rem' }}>
-                Play Lab
-              </a>
-            </nav>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-              <button
-                type="button"
-                onClick={triggerInkSplashTheme}
-                aria-label="Toggle dark or light theme"
-                className="btn-ghost"
-                style={{ width: '38px', height: '38px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
-              </button>
-              <button
-                type="button"
-                onClick={() => setBagOpen(true)}
-                className="btn-primary"
-                style={{ padding: '0.55rem 1.05rem', fontSize: '0.86rem', display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
-              >
-                <ShoppingBag size={15} />
-                <span className="tabular-nums">Bag ({bagCount})</span>
-              </button>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button
+              type="button"
+              onClick={triggerInkSplashTheme}
+              aria-label="Toggle dark or light theme"
+              className="btn-ghost"
+              style={{ width: '38px', height: '38px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setBagOpen(true)}
+              className="btn-primary"
+              style={{ padding: '0.52rem 1rem', fontSize: '0.84rem', display: 'inline-flex', alignItems: 'center', gap: '0.42rem' }}
+            >
+              <ShoppingBag size={15} />
+              <span className="tabular-nums">Bag ({bagCount})</span>
+            </button>
           </div>
         </div>
+
+        {/* LIVE DESIGN LAB DRAWER (Switch 4 New Layouts + 4 Emote/Badge Packs Instantly!) */}
+        {designDockOpen && (
+          <div
+            style={{
+              borderTop: '2px solid var(--border)',
+              backgroundColor: 'var(--surface)',
+              padding: '0.9rem 1.25rem',
+            }}
+          >
+            <div
+              style={{
+                maxWidth: '1260px',
+                margin: '0 auto',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))',
+                gap: '1rem',
+              }}
+            >
+              <div>
+                <div className="font-neo" style={{ fontSize: '0.74rem', fontWeight: 800, marginBottom: '0.45rem', color: 'var(--text-muted)' }}>
+                  PICK PAGE LAYOUT (ALL MIX CLAY &amp; CLOUD + NEO-POP BOXES/FONTS):
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
+                  {LAYOUT_OPTIONS.map((lo) => {
+                    const active = layoutMode === lo.id;
+                    return (
+                      <button
+                        key={lo.id}
+                        type="button"
+                        onClick={() => setLayoutMode(lo.id)}
+                        className={active ? 'btn-primary' : 'btn-ghost'}
+                        style={{ padding: '0.48rem 0.65rem', textAlign: 'left', fontSize: '0.75rem' }}
+                      >
+                        <div style={{ fontWeight: 800 }}>{lo.name}</div>
+                        <div style={{ fontSize: '0.65rem', opacity: 0.85, fontWeight: 500 }}>{lo.note}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="font-neo" style={{ fontSize: '0.74rem', fontWeight: 800, marginBottom: '0.45rem', color: 'var(--text-muted)' }}>
+                  PICK SENSORY EMOTE / RATING ICON PACK (SQUISH + SOUND + $):
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
+                  {EMOTE_PACK_OPTIONS.map((ep) => {
+                    const active = emotePack === ep.id;
+                    return (
+                      <button
+                        key={ep.id}
+                        type="button"
+                        onClick={() => setEmotePack(ep.id)}
+                        className={active ? 'btn-primary' : 'btn-ghost'}
+                        style={{ padding: '0.48rem 0.65rem', textAlign: 'left', fontSize: '0.75rem' }}
+                      >
+                        <div style={{ fontWeight: 800 }}>{ep.name}</div>
+                        <div style={{ fontSize: '0.65rem', opacity: 0.85, fontWeight: 500 }}>{ep.note}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       <main>
-        {/* =================================================================
-            HERO LAYOUT VARIANT 1: CLAY & CLOUD BOUTIQUE (Default)
-            ================================================================= */}
-        {stylePreset === 'clay' && (
+        {/* ===================================================================
+            PINNED 4-ITEM SCROLL-DRIVEN TOP SHOWCASE CAROUSEL (320vh Track!)
+            Scrolls smoothly through ALL 4 signature items before releasing!
+            =================================================================== */}
+        <div
+          ref={heroTrackRef}
+          style={{
+            position: 'relative',
+            height: heroItems.length >= 4 ? '315vh' : 'auto',
+          }}
+        >
           <section
+            aria-label="Featured 4-item scroll showcase"
             style={{
-              maxWidth: '1220px',
-              margin: '0 auto',
-              padding: '2.8rem 1.25rem 2rem',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))',
-              gap: '2.5rem',
-              alignItems: 'center',
+              position: heroItems.length >= 4 ? 'sticky' : 'relative',
+              top: '62px',
+              minHeight: 'calc(100vh - 64px)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              padding: '1.35rem 1.25rem 1.6rem',
+              background:
+                theme === 'dark'
+                  ? `radial-gradient(circle at 68% 44%, ${activeHeroTheme.stageGlow}, transparent 58%)`
+                  : `radial-gradient(circle at 68% 44%, ${activeHeroTheme.stageGlow}, transparent 62%)`,
+              transition: 'background 0.35s ease',
             }}
           >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
-              <h1
-                className="font-display"
+            <div style={{ maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
+              {activeHero && (
+                <div className="pinned-hero-grid">
+                  {/* LEFT: Clay-Cloud Spacious Copy + Neo-Pop Typography, Emotes & Inline Stepper */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+                      <span
+                        className="font-neo"
+                        style={{
+                          padding: '0.28rem 0.78rem',
+                          borderRadius: '999px',
+                          backgroundColor: activeHeroTheme.accentPill,
+                          color: '#141417',
+                          border: '2px solid #141417',
+                          boxShadow: '2px 2px 0px #141417',
+                          fontSize: '0.74rem',
+                          fontWeight: 800,
+                        }}
+                      >
+                        {activeHeroTheme.badge}
+                      </span>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                        Scroll to preview all 4 icons ({Math.min(4, heroIdx + 1)}/4)
+                      </span>
+                    </div>
+
+                    <h1
+                      className="font-display"
+                      style={{
+                        margin: 0,
+                        fontSize: 'clamp(2.25rem, 4.6vw, 3.85rem)',
+                        lineHeight: 1.03,
+                        fontWeight: 800,
+                      }}
+                    >
+                      {activeHero.name}
+                    </h1>
+
+                    <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '1.05rem', maxWidth: '500px' }}>
+                      {activeHero.short_tagline}
+                    </p>
+
+                    {/* Live Sensory Emotes Box (Squish + Sound/Noise + $ Tier) */}
+                    <div
+                      className="surface-card"
+                      style={{
+                        alignSelf: 'flex-start',
+                        padding: '0.68rem 0.95rem',
+                        borderRadius: '1rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                      }}
+                    >
+                      <SensoryStatCluster item={activeHero} emotePack={emotePack} />
+                    </div>
+
+                    {/* Inline Grocery Stepper + Explore / Skip Controls */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem', paddingTop: '0.2rem' }}>
+                      <GroceryQtyStepper
+                        item={activeHero}
+                        bag={bag}
+                        onAdd={addToBag}
+                        onUpdateQty={updateBagQty}
+                        size="lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProduct(activeHero)}
+                        className="btn-ghost"
+                        style={{ padding: '0.78rem 1.2rem', fontSize: '0.88rem' }}
+                      >
+                        Full Specs
+                      </button>
+                      <a
+                        href="#feel-lab"
+                        className="btn-ghost"
+                        style={{
+                          padding: '0.78rem 1.1rem',
+                          fontSize: '0.84rem',
+                          textDecoration: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.3rem',
+                        }}
+                      >
+                        <span>Skip to Play Lab</span>
+                        <ArrowDown size={14} />
+                      </a>
+                    </div>
+
+                    {/* 4-Slide Scroll Progress Rail & Clickable Jump Thumbnails */}
+                    <div style={{ paddingTop: '0.45rem' }}>
+                      <div
+                        style={{
+                          height: '8px',
+                          width: '100%',
+                          maxWidth: '420px',
+                          borderRadius: '999px',
+                          border: '2px solid var(--border)',
+                          backgroundColor: 'var(--surface)',
+                          overflow: 'hidden',
+                          marginBottom: '0.65rem',
+                        }}
+                      >
+                        <div
+                          style={{
+                            height: '100%',
+                            width: `${Math.max(12, Math.min(100, heroScrollPct * 100)).toFixed(1)}%`,
+                            backgroundColor: 'var(--accent)',
+                            transition: 'width 0.08s linear',
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem' }}>
+                        {heroItems.map((hi, idx) => {
+                          const isCurrent = idx === heroIdx;
+                          return (
+                            <button
+                              key={hi.id}
+                              type="button"
+                              onClick={() => jumpToHeroSlide(idx)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.45rem',
+                                padding: '0.32rem 0.65rem 0.32rem 0.36rem',
+                                borderRadius: '0.8rem',
+                                border: '2px solid var(--border)',
+                                backgroundColor: isCurrent ? 'var(--surface-butter)' : 'var(--surface)',
+                                color: isCurrent ? '#141417' : 'var(--text)',
+                                boxShadow: isCurrent ? '3px 3px 0px var(--border)' : 'none',
+                                cursor: 'pointer',
+                                fontWeight: 800,
+                                fontSize: '0.75rem',
+                              }}
+                            >
+                              <img
+                                src={hi.image_url}
+                                alt=""
+                                style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '0.5rem',
+                                  objectFit: 'cover',
+                                  border: '1.5px solid #141417',
+                                }}
+                              />
+                              <span className="font-neo">0{idx + 1}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* RIGHT: 3D Tilt Clay-Cloud × Neo-Pop Showcase Card */}
+                  <div
+                    onMouseMove={(e) => {
+                      const r = e.currentTarget.getBoundingClientRect();
+                      const nx = (e.clientX - r.left) / r.width - 0.5;
+                      const ny = (e.clientY - r.top) / r.height - 0.5;
+                      setCardTilt({ rx: (-ny * 8).toFixed(2), ry: (nx * 10).toFixed(2) });
+                    }}
+                    onMouseLeave={() => setCardTilt({ rx: 0, ry: 0 })}
+                    onClick={() => setSelectedProduct(activeHero)}
+                    className="surface-card"
+                    style={{
+                      padding: '1.25rem',
+                      background: theme === 'dark' ? 'var(--surface)' : activeHeroTheme.cardBg,
+                      cursor: 'pointer',
+                      transform: `perspective(950px) rotateX(${cardTilt.rx}deg) rotateY(${cardTilt.ry}deg)`,
+                      transition: 'transform 0.14s ease-out, background 0.35s ease',
+                    }}
+                  >
+                    <div
+                      style={{
+                        borderRadius: '1.15rem',
+                        border: '2px solid #141417',
+                        overflow: 'hidden',
+                        aspectRatio: '16 / 12',
+                        backgroundColor: '#FFFFFF',
+                        position: 'relative',
+                      }}
+                    >
+                      <img
+                        key={activeHero.id}
+                        src={activeHero.image_url}
+                        alt={activeHero.name}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          display: 'block',
+                        }}
+                      />
+                      <span
+                        className="font-neo"
+                        style={{
+                          position: 'absolute',
+                          bottom: '0.75rem',
+                          right: '0.75rem',
+                          padding: '0.32rem 0.78rem',
+                          borderRadius: '999px',
+                          backgroundColor: '#FFFFFF',
+                          color: '#141417',
+                          border: '2px solid #141417',
+                          boxShadow: '3px 3px 0px #141417',
+                          fontWeight: 800,
+                          fontSize: '0.95rem',
+                        }}
+                      >
+                        ${Number(activeHero.price_usd).toFixed(0)}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: '0.9rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '0.6rem',
+                        color: theme === 'dark' ? 'var(--text)' : '#141417',
+                      }}
+                    >
+                      <span className="font-neo" style={{ fontSize: '0.8rem', fontWeight: 800 }}>
+                        {activeHero.subtitle}
+                      </span>
+                      <span className="font-neo" style={{ fontSize: '0.76rem', fontWeight: 800, textDecoration: 'underline' }}>
+                        Tap for Details →
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+
+        {/* NEO-POP KINETIC MARQUEE RIBBON */}
+        <div
+          style={{
+            borderTop: '2px solid var(--border)',
+            borderBottom: '2px solid var(--border)',
+            backgroundColor: 'var(--surface-butter)',
+            color: '#141417',
+            overflow: 'hidden',
+            padding: '0.52rem 0',
+          }}
+        >
+          <div className="pop-marquee-track font-neo" style={{ fontSize: '0.8rem', fontWeight: 800, letterSpacing: '0.05em' }}>
+            {Array(6)
+              .fill(
+                'INLINE GROCERY STEPPERS (+ / -)  •  0dB SILENT SQUISHIES  •  R188 CERAMIC SPINNERS  •  4-KEY CREAMY CLICKERS  •  TOUCH-TO-SING PLUSHIES  •  FREE US SHIPPING $65+  •  '
+              )
+              .map((txt, idx) => (
+                <span key={idx} style={{ paddingRight: '0.4rem' }}>
+                  {txt}
+                </span>
+              ))}
+          </div>
+        </div>
+
+        {/* ===================================================================
+            LAYOUT 1 (DEFAULT): CLAY-CLOUD × NEO-POP BENTO ARCADE
+            =================================================================== */}
+        {layoutMode === 'bento_arcade' && (
+          <>
+            <TactileFeelLab />
+
+            <section id="collection" style={{ maxWidth: '1240px', margin: '0 auto', padding: '1.8rem 1.25rem 2.6rem' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.85rem', marginBottom: '1.25rem' }}>
+                <div>
+                  <h2 className="font-display" style={{ margin: 0, fontSize: 'clamp(1.65rem, 2.8vw, 2.25rem)', fontWeight: 800 }}>
+                    Shop the Sensory Arcade
+                  </h2>
+                  <div style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>
+                    Filter by feel or sound profile — click + Add to adjust quantities right on any card.
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.42rem' }}>
+                  {COLLECTIONS.map((col) => (
+                    <button
+                      key={col.id}
+                      type="button"
+                      onClick={() => setActiveCollection(col.id)}
+                      className={activeCollection === col.id ? 'btn-primary' : 'btn-ghost'}
+                      style={{ padding: '0.46rem 0.88rem', fontSize: '0.79rem' }}
+                    >
+                      {col.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sound / Noise Quick Filter Pills */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.45rem', marginBottom: '1.35rem' }}>
+                <span className="font-neo" style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                  Sound Check:
+                </span>
+                {SOUND_FILTERS.map((sf) => (
+                  <button
+                    key={sf.id}
+                    type="button"
+                    onClick={() => setSoundFilter(sf.id)}
+                    className={soundFilter === sf.id ? 'btn-primary' : 'btn-ghost'}
+                    style={{ padding: '0.32rem 0.72rem', fontSize: '0.74rem' }}
+                  >
+                    {sf.label}
+                  </button>
+                ))}
+              </div>
+
+              <div
                 style={{
-                  margin: 0,
-                  fontSize: 'clamp(2.4rem, 4.8vw, 3.8rem)',
-                  lineHeight: 1.06,
-                  fontWeight: 600,
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(282px, 1fr))',
+                  gap: '1.3rem',
                 }}
               >
-                Calm rituals for restless hands.
-              </h1>
-              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '1.06rem', maxWidth: '470px' }}>
-                Silky ceramic spinners, creamy mechanical clickers, slow-rise mochi squishies, and plushies that sing when you hold hands.
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.85rem', paddingTop: '0.25rem' }}>
-                <a
-                  href="#collection"
-                  className="btn-primary"
-                  style={{ padding: '0.88rem 1.65rem', textDecoration: 'none', fontSize: '0.95rem' }}
-                >
-                  Shop Collection
-                </a>
-                <a
-                  href="#feel-lab"
-                  className="btn-ghost"
-                  style={{ padding: '0.88rem 1.4rem', textDecoration: 'none', fontSize: '0.95rem' }}
-                >
-                  Try the Play Lab
-                </a>
+                {filteredItems.map((item, idx) =>
+                  renderProductCard(item, activeCollection === 'all' && soundFilter === 'all' && idx === 0, false)
+                )}
               </div>
-            </div>
+            </section>
+          </>
+        )}
 
-            {featuredHero && (
-              <div
-                className="surface-card"
-                onClick={() => setSelectedProduct(featuredHero)}
+        {/* ===================================================================
+            LAYOUT 2: STICKY MOOD-FINDER & TESTER SPLIT SHELF
+            =================================================================== */}
+        {layoutMode === 'split_shelf' && (
+          <section id="collection" style={{ maxWidth: '1260px', margin: '0 auto', padding: '2rem 1.25rem 2.8rem' }}>
+            <div
+              className="split-lookbook-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '340px 1fr',
+                gap: '1.6rem',
+                alignItems: 'start',
+              }}
+            >
+              <aside
+                className="surface-card split-sticky-sidebar"
                 style={{
-                  padding: '1.35rem',
-                  cursor: 'pointer',
+                  position: 'sticky',
+                  top: '84px',
+                  padding: '1.2rem',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '1rem',
                 }}
               >
-                <div style={{ borderRadius: '1.25rem', overflow: 'hidden', aspectRatio: '16 / 11', backgroundColor: 'var(--surface-muted)' }}>
-                  <img
-                    src={featuredHero.image_url}
-                    alt={featuredHero.name}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
-                  <div>
-                    <div className="font-display" style={{ fontSize: '1.15rem', fontWeight: 600 }}>{featuredHero.name}</div>
-                    <MarshmallowMeter level={featuredHero.squish_level} label={featuredHero.squish_label} size={18} />
+                <div>
+                  <div className="font-display" style={{ fontSize: '1.3rem', fontWeight: 800 }}>
+                    Find Your Exact Feel
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }} onClick={(e) => e.stopPropagation()}>
-                    {heroItems.map((hi, idx) => (
-                      <button
-                        key={hi.id}
-                        type="button"
-                        onClick={() => setHeroIdx(idx)}
-                        aria-label={`Preview ${hi.name}`}
-                        style={{
-                          width: '40px',
-                          height: '40px',
-                          padding: 0,
-                          borderRadius: '0.65rem',
-                          overflow: 'hidden',
-                          border: idx === heroIdx ? '2.5px solid var(--accent)' : '1px solid var(--border)',
-                          cursor: 'pointer',
-                          background: 'none',
-                        }}
-                      >
-                        <img src={hi.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                      </button>
-                    ))}
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Pick category &amp; classroom/office noise level:
                   </div>
                 </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {COLLECTIONS.map((col) => (
+                    <button
+                      key={col.id}
+                      type="button"
+                      onClick={() => setActiveCollection(col.id)}
+                      className={activeCollection === col.id ? 'btn-primary' : 'btn-ghost'}
+                      style={{ padding: '0.4rem 0.75rem', fontSize: '0.76rem' }}
+                    >
+                      {col.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ borderTop: '1.5px dashed var(--border-subtle)', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.38rem' }}>
+                  <span className="font-neo" style={{ fontSize: '0.74rem', fontWeight: 800 }}>NOISE / SOUND LEVEL:</span>
+                  {SOUND_FILTERS.map((sf) => (
+                    <button
+                      key={sf.id}
+                      type="button"
+                      onClick={() => setSoundFilter(sf.id)}
+                      className={soundFilter === sf.id ? 'btn-primary' : 'btn-ghost'}
+                      style={{ padding: '0.42rem 0.7rem', fontSize: '0.75rem', textAlign: 'left' }}
+                    >
+                      {sf.label}
+                    </button>
+                  ))}
+                </div>
+              </aside>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.6rem' }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                    gap: '1.25rem',
+                  }}
+                >
+                  {filteredItems.map((item) => renderProductCard(item, false, true))}
+                </div>
+                <TactileFeelLab />
               </div>
-            )}
+            </div>
           </section>
         )}
 
-        {/* =================================================================
-            HERO LAYOUT VARIANT 2: NEO-POP SWISS EDITORIAL (Ticker + Bento)
-            ================================================================= */}
-        {stylePreset === 'pop' && (
+        {/* ===================================================================
+            LAYOUT 3: TACTILE CATEGORY SWIMLANES & FULL SOUNDSTAGE
+            =================================================================== */}
+        {layoutMode === 'category_lanes' && (
           <>
-            <div style={{ borderBottom: '2px solid #141417', backgroundColor: '#FFF4CC', overflow: 'hidden', padding: '0.48rem 0' }}>
-              <div className="pop-marquee-track" style={{ fontSize: '0.8rem', fontWeight: 800, letterSpacing: '0.06em', color: '#141417' }}>
-                {Array(8)
-                  .fill('R188 CERAMIC SPINNERS  •  CREAMY 4-KEY CLICKERS  •  MOCHI TABA SQUISHIES  •  MUSICAL TOUCH PLUSHIES  •  FREE US SHIPPING $65+  •  ')
-                  .map((txt, idx) => (
-                    <span key={idx} style={{ paddingRight: '0.4rem' }}>{txt}</span>
-                  ))}
-              </div>
-            </div>
-            <section style={{ maxWidth: '1220px', margin: '0 auto', padding: '2.6rem 1.25rem 1.8rem' }}>
-              <div style={{ textAlign: 'center', maxWidth: '780px', margin: '0 auto 2rem' }}>
-                <h1 className="font-display" style={{ margin: '0 0 0.75rem', fontSize: 'clamp(2.5rem, 5.2vw, 4.1rem)', lineHeight: 1.02, fontWeight: 700 }}>
-                  Tactile joy you can spin, click &amp; squeeze.
-                </h1>
-                <div style={{ display: 'inline-flex', gap: '0.75rem', marginTop: '0.4rem' }}>
-                  <a href="#collection" className="btn-primary" style={{ padding: '0.82rem 1.55rem', textDecoration: 'none', fontSize: '0.92rem' }}>
-                    Explore All 12 Toys
-                  </a>
-                  <a href="#feel-lab" className="btn-ghost" style={{ padding: '0.82rem 1.35rem', textDecoration: 'none', fontSize: '0.92rem' }}>
-                    Play Lab
-                  </a>
-                </div>
-              </div>
+            <TactileFeelLab />
 
-              {heroItems.length >= 2 && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
-                  {heroItems.slice(0, 2).map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => setSelectedProduct(item)}
-                      className="surface-card product-card"
-                      style={{ padding: '1.1rem', display: 'grid', gridTemplateColumns: '140px 1fr', gap: '1.1rem', alignItems: 'center' }}
-                    >
-                      <img src={item.image_url} alt={item.name} style={{ width: '140px', height: '140px', objectFit: 'cover', borderRadius: '0.8rem', border: '2px solid #141417' }} />
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--blush)', textTransform: 'uppercase' }}>{item.vibe_chip}</span>
-                        <div className="font-display" style={{ fontSize: '1.2rem', fontWeight: 700, lineHeight: 1.2 }}>{item.name}</div>
-                        <MarshmallowMeter level={item.squish_level} label={item.squish_label} size={18} />
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.2rem' }}>
-                          <span className="tabular-nums" style={{ fontWeight: 800, fontSize: '1.1rem' }}>${item.price_usd}</span>
-                          <YelpPriceSigns tier={item.price_tier} />
-                        </div>
-                      </div>
+            <section id="collection" style={{ maxWidth: '1260px', margin: '0 auto', padding: '1.5rem 1.25rem 2.8rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              {COLLECTIONS.filter((c) => c.id !== 'all').map((lane) => {
+                const laneItems = catalog.filter((it) => it.collection === lane.id);
+                if (!laneItems.length) return null;
+                return (
+                  <div key={lane.id}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.75rem' }}>
+                      <h2 className="font-display" style={{ margin: 0, fontSize: '1.55rem', fontWeight: 800 }}>
+                        {lane.label}
+                      </h2>
+                      <span className="font-neo" style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                        {laneItems.length} Curated Objects →
+                      </span>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <div className="swimlane-scroll">
+                      {laneItems.map((item) => renderProductCard(item, false, false))}
+                    </div>
+                  </div>
+                );
+              })}
             </section>
           </>
         )}
 
-        {/* =================================================================
-            HERO LAYOUT VARIANT 3: FROSTED AERO GLASS CAROUSEL
-            ================================================================= */}
-        {stylePreset === 'glass' && featuredHero && (
-          <section style={{ maxWidth: '1160px', margin: '0 auto', padding: '2.4rem 1.25rem 1.8rem' }}>
-            <div
-              className="surface-card"
-              style={{
-                padding: 'clamp(1.5rem, 3.5vw, 2.6rem)',
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))',
-                gap: '2rem',
-                alignItems: 'center',
-              }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <span style={{ alignSelf: 'flex-start', padding: '0.28rem 0.75rem', borderRadius: '999px', backgroundColor: 'var(--accent-soft)', color: 'var(--accent)', fontSize: '0.76rem', fontWeight: 700 }}>
-                  {featuredHero.vibe_chip}
-                </span>
-                <h1 className="font-display" style={{ margin: 0, fontSize: 'clamp(2.1rem, 4vw, 3.2rem)', lineHeight: 1.08, fontWeight: 800 }}>
-                  {featuredHero.name}
-                </h1>
-                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '1rem' }}>
-                  {featuredHero.short_tagline}
-                </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <MarshmallowMeter level={featuredHero.squish_level} label={featuredHero.squish_label} size={20} />
-                  <YelpPriceSigns tier={featuredHero.price_tier} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingTop: '0.25rem' }}>
-                  <button
-                    type="button"
-                    onClick={(e) => addToBag(featuredHero, e)}
-                    className="btn-primary"
-                    style={{ padding: '0.8rem 1.5rem', fontSize: '0.92rem' }}
-                  >
-                    Add to Bag — ${featuredHero.price_usd}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setHeroIdx((i) => (i - 1 + heroItems.length) % heroItems.length)}
-                    aria-label="Previous spotlight"
-                    className="btn-ghost"
-                    style={{ width: '40px', height: '40px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    <ChevronLeft size={18} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setHeroIdx((i) => (i + 1) % heroItems.length)}
-                    aria-label="Next spotlight"
-                    className="btn-ghost"
-                    style={{ width: '40px', height: '40px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    <ChevronRight size={18} />
-                  </button>
-                </div>
-              </div>
-
+        {/* ===================================================================
+            LAYOUT 4: COLLECTIBLE STAT-CARD & LIVE BUNDLE DECK
+            =================================================================== */}
+        {layoutMode === 'stat_deck' && (
+          <>
+            <section style={{ maxWidth: '1240px', margin: '0 auto', padding: '2rem 1.25rem 0.5rem' }}>
               <div
-                onClick={() => setSelectedProduct(featuredHero)}
-                style={{ cursor: 'pointer', display: 'flex', justifyContent: 'center' }}
-              >
-                <img
-                  src={featuredHero.image_url}
-                  alt={featuredHero.name}
-                  style={{ width: '100%', maxWidth: '340px', aspectRatio: '1 / 1', objectFit: 'cover', borderRadius: '1.5rem', boxShadow: '0 22px 44px -16px rgba(15,42,74,0.22)' }}
-                />
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* =================================================================
-            HERO LAYOUT VARIANT 4: NORDIC WARM EDITORIAL GALLERY
-            ================================================================= */}
-        {stylePreset === 'nordic' && featuredHero && (
-          <section style={{ maxWidth: '1220px', margin: '0 auto', padding: '2.5rem 1.25rem 1.8rem' }}>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))',
-                border: '1px solid var(--border)',
-                borderRadius: '0.75rem',
-                overflow: 'hidden',
-                backgroundColor: 'var(--surface)',
-              }}
-            >
-              <div style={{ padding: 'clamp(2rem, 4vw, 3.4rem)', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '1.1rem' }}>
-                <div style={{ fontSize: '0.76rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
-                  Small-Batch Tactile Objects
-                </div>
-                <h1 className="font-display" style={{ margin: 0, fontSize: 'clamp(2.2rem, 4vw, 3.3rem)', fontWeight: 500, lineHeight: 1.1 }}>
-                  Thoughtfully weighted tools for quiet focus.
-                </h1>
-                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.98rem', maxWidth: '430px' }}>
-                  Crafted from platinum silicone, hybrid ceramic bearings, and soft velour for calm everyday rituals.
-                </p>
-                <div>
-                  <a href="#collection" className="btn-primary" style={{ display: 'inline-block', padding: '0.82rem 1.6rem', textDecoration: 'none', fontSize: '0.9rem' }}>
-                    View Objects
-                  </a>
-                </div>
-              </div>
-              <div style={{ minHeight: '340px', backgroundColor: 'var(--surface-muted)' }}>
-                <img src={featuredHero.image_url} alt={featuredHero.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* =================================================================
-            CLEAN, BREATHABLE PRODUCT CATALOG GRID
-            (Photo + Title + Happy Marshmallow Softness + Yelp $ Tier + Add!)
-            ================================================================= */}
-        <section id="collection" aria-labelledby="collection-heading" style={{ maxWidth: '1220px', margin: '0 auto', padding: '2rem 1.25rem 2.6rem' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.4rem' }}>
-            <h2 id="collection-heading" className="font-display" style={{ margin: 0, fontSize: 'clamp(1.55rem, 2.8vw, 2.15rem)', fontWeight: 700 }}>
-              Sensory Collection
-            </h2>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
-              {COLLECTIONS.map((col) => {
-                const active = activeCollection === col.id;
-                return (
-                  <button
-                    key={col.id}
-                    type="button"
-                    onClick={() => setActiveCollection(col.id)}
-                    className={active ? 'btn-primary' : 'btn-ghost'}
-                    style={{ padding: '0.5rem 0.95rem', fontSize: '0.83rem' }}
-                  >
-                    {col.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns:
-                stylePreset === 'nordic'
-                  ? 'repeat(auto-fill, minmax(255px, 1fr))'
-                  : 'repeat(auto-fill, minmax(276px, 1fr))',
-              gap: '1.35rem',
-            }}
-          >
-            {filteredItems.map((item) => (
-              <article
-                key={item.id}
-                onClick={() => setSelectedProduct(item)}
-                className="surface-card product-card"
+                className="surface-card"
                 style={{
-                  padding: stylePreset === 'nordic' ? '0.85rem' : '1rem',
+                  padding: '1.25rem 1.5rem',
+                  background: theme === 'dark' ? 'var(--surface)' : 'linear-gradient(120deg, #DCFCE7 0%, #FFF3C4 100%)',
                   display: 'flex',
-                  flexDirection: 'column',
+                  flexWrap: 'wrap',
                   justifyContent: 'space-between',
-                  gap: '0.85rem',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  color: theme === 'dark' ? 'var(--text)' : '#141417',
                 }}
               >
-                <div>
-                  <div
-                    style={{
-                      backgroundColor: 'var(--surface-muted)',
-                      borderRadius: stylePreset === 'nordic' ? '0.45rem' : '1.1rem',
-                      aspectRatio: '1 / 1',
-                      position: 'relative',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <img
-                      src={item.image_url}
-                      alt={item.name}
-                      loading="lazy"
-                      className="product-img-zoom"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                    />
-                    {stylePreset !== 'nordic' && (
-                      <span
-                        style={{
-                          position: 'absolute',
-                          top: '0.65rem',
-                          left: '0.65rem',
-                          padding: '0.22rem 0.6rem',
-                          borderRadius: '999px',
-                          backgroundColor: 'rgba(255, 255, 255, 0.90)',
-                          color: '#141417',
-                          fontSize: '0.7rem',
-                          fontWeight: 700,
-                          backdropFilter: 'blur(6px)',
-                        }}
-                      >
-                        {item.vibe_chip}
-                      </span>
-                    )}
-                  </div>
-
-                  <div style={{ paddingTop: '0.8rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem' }}>
-                      <h3 className="font-display" style={{ margin: 0, fontSize: '1.06rem', fontWeight: 600, lineHeight: 1.25 }}>
-                        {item.name}
-                      </h3>
-                      <span className="tabular-nums" style={{ fontWeight: 800, fontSize: '1.05rem', flexShrink: 0 }}>
-                        ${Number(item.price_usd).toFixed(0)}
-                      </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                  <PackageCheck size={28} />
+                  <div>
+                    <div className="font-display" style={{ fontSize: '1.25rem', fontWeight: 800 }}>
+                      Build Your Desk &amp; Travel Calm Kit
                     </div>
-                    <div style={{ fontSize: '0.81rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                      {item.subtitle}
+                    <div style={{ fontSize: '0.84rem', opacity: 0.88 }}>
+                      Add any items inline below — orders $65+ unlock automatic Free US Shipping ({freeShipRemaining <= 0 ? 'Unlocked!' : `$${freeShipRemaining.toFixed(0)} away`}).
                     </div>
                   </div>
                 </div>
 
-                {/* Yelp-Style Visual Rating Bar: Happy Marshmallows + $ Signs + Quick Add */}
-                <div
-                  style={{
-                    paddingTop: '0.65rem',
-                    borderTop: '1px solid var(--border)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                    <MarshmallowMeter level={item.squish_level} size={18} />
-                    <span style={{ color: 'var(--border)' }}>•</span>
-                    <YelpPriceSigns tier={item.price_tier} />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={(e) => addToBag(item, e)}
-                    className="btn-primary"
-                    aria-label={`Add ${item.name} to bag`}
-                    style={{
-                      padding: '0.45rem 0.85rem',
-                      fontSize: '0.8rem',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.25rem',
-                    }}
-                  >
-                    <Plus size={14} />
-                    <span>Add</span>
-                  </button>
+                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                  {SOUND_FILTERS.map((sf) => (
+                    <button
+                      key={sf.id}
+                      type="button"
+                      onClick={() => setSoundFilter(sf.id)}
+                      className={soundFilter === sf.id ? 'btn-primary' : 'btn-ghost'}
+                      style={{ padding: '0.38rem 0.75rem', fontSize: '0.75rem' }}
+                    >
+                      {sf.label}
+                    </button>
+                  ))}
                 </div>
-              </article>
-            ))}
-          </div>
-        </section>
+              </div>
+            </section>
 
-        {/* Interactive Play Lab */}
-        <TactileFeelLab />
+            <section id="collection" style={{ maxWidth: '1240px', margin: '0 auto', padding: '1.4rem 1.25rem 2rem' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(285px, 1fr))',
+                  gap: '1.3rem',
+                }}
+              >
+                {filteredItems.map((item) => renderProductCard(item, false, true))}
+              </div>
+            </section>
 
-        {/* Clean, Human Newsletter Box (Zero Audit Jargon!) */}
-        <section style={{ maxWidth: '720px', margin: '0 auto', padding: '2rem 1.25rem 3.5rem' }}>
+            <TactileFeelLab />
+          </>
+        )}
+
+        {/* CLEAN HUMAN NEWSLETTER BOX */}
+        <section style={{ maxWidth: '720px', margin: '0 auto', padding: '1.6rem 1.25rem 4.5rem' }}>
           <div
             className="surface-card"
             style={{
-              padding: 'clamp(1.6rem, 3.5vw, 2.3rem)',
+              padding: 'clamp(1.6rem, 3.5vw, 2.2rem)',
               textAlign: 'center',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               gap: '0.75rem',
+              background: theme === 'dark' ? 'var(--surface)' : 'linear-gradient(135deg, #FFFFFF 0%, #FFF7ED 100%)',
             }}
           >
-            <h3 className="font-display" style={{ margin: 0, fontSize: '1.55rem', fontWeight: 700 }}>
+            <span
+              className="font-neo"
+              style={{
+                padding: '0.2rem 0.65rem',
+                borderRadius: '999px',
+                backgroundColor: 'var(--surface-blush)',
+                border: '1.5px solid var(--border)',
+                fontSize: '0.7rem',
+                fontWeight: 800,
+              }}
+            >
+              SMALL-BATCH DROPS
+            </span>
+            <h3 className="font-display" style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800 }}>
               Join the newsletter to be in the know
             </h3>
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.92rem', maxWidth: '440px' }}>
-              Get early access to small-batch squishies, new spinner finishes, and seasonal gift boxes.
+              First dibs on limited mochi taba squishies, anodized R188 spinner runs, and seasonal sensory gift boxes.
             </p>
             <form
               onSubmit={handleNewsletter}
@@ -907,8 +1262,8 @@ export default function App() {
                 justifyContent: 'center',
                 gap: '0.55rem',
                 width: '100%',
-                maxWidth: '440px',
-                marginTop: '0.35rem',
+                maxWidth: '450px',
+                marginTop: '0.3rem',
               }}
             >
               <input
@@ -923,8 +1278,8 @@ export default function App() {
                   minWidth: '200px',
                   padding: '0.72rem 1rem',
                   borderRadius: 'var(--btn-radius)',
-                  border: '1px solid var(--border)',
-                  backgroundColor: 'var(--surface-muted)',
+                  border: '2px solid var(--border)',
+                  backgroundColor: 'var(--surface)',
                   color: 'var(--text)',
                   fontSize: '0.9rem',
                 }}
@@ -934,7 +1289,7 @@ export default function App() {
               </button>
             </form>
             {newsletterMsg && (
-              <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--accent)', marginTop: '0.2rem' }}>
+              <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--mint-strong)', marginTop: '0.2rem' }}>
                 {newsletterMsg}
               </div>
             )}
@@ -942,18 +1297,82 @@ export default function App() {
         </section>
       </main>
 
-      {/* Quiet, Standard Brand Footer */}
+      {/* FLOATING GROCERY MINI-BAG BAR (Shows live total + free shipping progress without opening cart!) */}
+      {bagCount > 0 && !bagOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '1.1rem',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 730,
+            width: 'min(92vw, 540px)',
+          }}
+        >
+          <div
+            className="surface-card"
+            style={{
+              padding: '0.65rem 0.9rem',
+              borderRadius: '999px',
+              backgroundColor: theme === 'dark' ? '#182029' : '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.75rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0 }}>
+              <div style={{ display: 'flex' }}>
+                {bag.slice(0, 3).map((bi, i) => (
+                  <img
+                    key={bi.id}
+                    src={bi.image_url}
+                    alt=""
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: '2px solid #141417',
+                      marginLeft: i === 0 ? 0 : '-8px',
+                    }}
+                  />
+                ))}
+              </div>
+              <div style={{ fontSize: '0.78rem', lineHeight: 1.2 }}>
+                <div className="font-neo" style={{ fontWeight: 800 }}>
+                  {bagCount} {bagCount === 1 ? 'item' : 'items'} • ${bagSubtotal.toFixed(2)}
+                </div>
+                <div style={{ fontSize: '0.69rem', color: 'var(--mint-strong)', fontWeight: 700 }}>
+                  {freeShipRemaining <= 0 ? 'Free US Shipping Unlocked!' : `Add $${freeShipRemaining.toFixed(0)} for Free US Shipping`}
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setBagOpen(true)}
+              className="btn-primary"
+              style={{ padding: '0.5rem 1rem', borderRadius: '999px', fontSize: '0.8rem', flexShrink: 0 }}
+            >
+              Checkout →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* FOOTER */}
       <footer
         id="legal"
         style={{
-          borderTop: '1px solid var(--border)',
+          borderTop: '2px solid var(--border)',
           backgroundColor: 'var(--surface-muted)',
-          padding: '2rem 1.25rem',
+          padding: '2rem 1.25rem 5rem',
         }}
       >
         <div
           style={{
-            maxWidth: '1220px',
+            maxWidth: '1240px',
             margin: '0 auto',
             display: 'flex',
             flexWrap: 'wrap',
@@ -968,26 +1387,23 @@ export default function App() {
             <strong style={{ color: 'var(--text)' }}>Kinetic Calm</strong> • Everyday tactile comfort objects (general wellness, non-medical). Free US shipping over $65.
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-            <button type="button" onClick={() => { setLegalTab('terms'); setLegalOpen(true); }} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}>
+            <button type="button" onClick={() => { setLegalTab('terms'); setLegalOpen(true); }} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
               Terms
             </button>
-            <button type="button" onClick={() => { setLegalTab('privacy'); setLegalOpen(true); }} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}>
+            <button type="button" onClick={() => { setLegalTab('privacy'); setLegalOpen(true); }} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
               Privacy &amp; Data Deletion
             </button>
-            <button type="button" onClick={() => { setLegalTab('refund'); setLegalOpen(true); }} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}>
+            <button type="button" onClick={() => { setLegalTab('refund'); setLegalOpen(true); }} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
               14-Day Returns
             </button>
-            <button type="button" onClick={() => { setLegalTab('cpsia'); setLegalOpen(true); }} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}>
+            <button type="button" onClick={() => { setLegalTab('cpsia'); setLegalOpen(true); }} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
               CPSC &amp; Wellness Info
             </button>
           </div>
         </div>
       </footer>
 
-      {/* =====================================================================
-          DEDICATED PRODUCT DETAIL MODAL / SHEET
-          (All detailed specs, materials, sound dB & safety live cleanly here!)
-          ===================================================================== */}
+      {/* PRODUCT DETAIL MODAL */}
       {selectedProduct && (
         <div
           role="dialog"
@@ -1016,7 +1432,7 @@ export default function App() {
               overflowY: 'auto',
               padding: 'clamp(1.25rem, 3vw, 2rem)',
               position: 'relative',
-              backgroundColor: theme === 'dark' ? '#151E24' : '#FFFFFF',
+              backgroundColor: 'var(--surface)',
             }}
           >
             <button
@@ -1029,61 +1445,49 @@ export default function App() {
               <X size={18} />
             </button>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.75rem', alignItems: 'start' }}>
-              <div style={{ borderRadius: '1.15rem', overflow: 'hidden', backgroundColor: 'var(--surface-muted)', aspectRatio: '1 / 1' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.65rem', alignItems: 'start' }}>
+              <div style={{ borderRadius: '1.15rem', border: '2px solid var(--border)', overflow: 'hidden', backgroundColor: 'var(--surface-muted)', aspectRatio: '1 / 1' }}>
                 <img src={selectedProduct.image_url} alt={selectedProduct.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.95rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
                 <div>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <span className="font-neo" style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--accent)', textTransform: 'uppercase' }}>
                     {selectedProduct.collection_label} • {selectedProduct.age_grade}
                   </span>
-                  <h2 className="font-display" style={{ margin: '0.25rem 0 0.2rem', fontSize: '1.65rem', fontWeight: 700, lineHeight: 1.18 }}>
+                  <h2 className="font-display" style={{ margin: '0.22rem 0', fontSize: '1.65rem', fontWeight: 800, lineHeight: 1.15 }}>
                     {selectedProduct.name}
                   </h2>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <span className="tabular-nums" style={{ fontSize: '1.4rem', fontWeight: 800 }}>
-                      ${Number(selectedProduct.price_usd).toFixed(2)}
-                    </span>
-                    <YelpPriceSigns tier={selectedProduct.price_tier} />
+                  <div className="tabular-nums font-neo" style={{ fontSize: '1.4rem', fontWeight: 800 }}>
+                    ${Number(selectedProduct.price_usd).toFixed(2)}
                   </div>
                 </div>
 
-                {/* Visual Softness & Sound Specs Card */}
-                <div style={{ padding: '0.85rem 1rem', borderRadius: '0.95rem', backgroundColor: 'var(--surface-muted)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>Squishiness</span>
-                    <MarshmallowMeter level={selectedProduct.squish_level} label={selectedProduct.squish_label} size={20} />
+                <div style={{ padding: '0.85rem 1rem', borderRadius: '0.95rem', border: '2px solid var(--border)', backgroundColor: 'var(--surface-muted)', display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                  <SensoryStatCluster item={selectedProduct} emotePack={emotePack} />
+                  <div style={{ fontSize: '0.8rem' }}>
+                    <strong>Sound Profile:</strong> {selectedProduct.sound_db}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
-                    <span style={{ fontWeight: 700 }}>Sound Profile</span>
-                    <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{selectedProduct.sound_db}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
-                    <span style={{ fontWeight: 700 }}>Tactile Feel</span>
-                    <span style={{ color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>{selectedProduct.vibe_chip}</span>
+                  <div style={{ fontSize: '0.8rem' }}>
+                    <strong>Texture &amp; Action:</strong> {selectedProduct.texture_profile}
                   </div>
                 </div>
 
-                <p style={{ margin: 0, fontSize: '0.92rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                <p style={{ margin: 0, fontSize: '0.92rem', color: 'var(--text-muted)', lineHeight: 1.58 }}>
                   {selectedProduct.full_story || selectedProduct.short_tagline}
                 </p>
 
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    addToBag(selectedProduct, e);
-                    setSelectedProduct(null);
-                  }}
-                  className="btn-primary"
-                  style={{ padding: '0.88rem 1.25rem', fontSize: '0.94rem', width: '100%' }}
-                >
-                  Add to Bag — ${Number(selectedProduct.price_usd).toFixed(2)}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <GroceryQtyStepper
+                    item={selectedProduct}
+                    bag={bag}
+                    onAdd={addToBag}
+                    onUpdateQty={updateBagQty}
+                    size="lg"
+                  />
+                </div>
 
-                {/* Materials & Safety neatly tucked at bottom of Detail View */}
-                <div style={{ paddingTop: '0.65rem', borderTop: '1px solid var(--border)', fontSize: '0.76rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <div style={{ paddingTop: '0.65rem', borderTop: '1.5px dashed var(--border-subtle)', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
                   <div><strong>Materials:</strong> {selectedProduct.material_spec}</div>
                   <div><strong>Care &amp; Safety:</strong> {selectedProduct.cpsia_astm_note} {selectedProduct.fda_wellness_note}</div>
                 </div>
@@ -1093,7 +1497,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Slide-Over Bag Drawer */}
+      {/* SLIDE-OVER BAG DRAWER */}
       {bagOpen && (
         <div
           role="dialog"
@@ -1113,9 +1517,10 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
             style={{
               width: '100%',
-              maxWidth: '410px',
+              maxWidth: '420px',
               height: '100%',
-              backgroundColor: theme === 'dark' ? '#151E24' : '#FFFFFF',
+              backgroundColor: 'var(--surface)',
+              borderLeft: '2px solid var(--border)',
               padding: '1.35rem',
               overflowY: 'auto',
               display: 'flex',
@@ -1124,7 +1529,7 @@ export default function App() {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 className="font-display" style={{ margin: 0, fontSize: '1.35rem', fontWeight: 700 }}>
+              <h2 className="font-display" style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800 }}>
                 Your Bag ({bagCount})
               </h2>
               <button type="button" onClick={() => setBagOpen(false)} aria-label="Close bag" className="btn-ghost" style={{ padding: '0.4rem 0.6rem' }}>
@@ -1134,7 +1539,7 @@ export default function App() {
 
             {bag.length === 0 ? (
               <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.92rem' }}>
-                Your bag is empty. Pick a spinner, clicker, squishy, or musical plush to get started.
+                Your bag is empty. Click + Add on any spinner, clicker, squishy, or musical plush.
               </div>
             ) : (
               <>
@@ -1147,62 +1552,47 @@ export default function App() {
                         alignItems: 'center',
                         gap: '0.75rem',
                         padding: '0.65rem',
-                        borderRadius: '0.85rem',
+                        borderRadius: '0.9rem',
+                        border: '2px solid var(--border)',
                         backgroundColor: 'var(--surface-muted)',
                       }}
                     >
-                      <img src={item.image_url} alt={item.name} style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '0.55rem' }} />
+                      <img src={item.image_url} alt={item.name} style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '0.55rem', border: '1.5px solid #141417' }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{item.name}</div>
-                        <div className="tabular-nums" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>${Number(item.price_usd).toFixed(2)}</div>
+                        <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>{item.name}</div>
+                        <div className="tabular-nums font-neo" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          ${Number(item.price_usd).toFixed(2)} each
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        <button type="button" onClick={() => updateBagQty(item.id, -1)} aria-label="Decrease quantity" className="btn-ghost" style={{ padding: '0.25rem' }}>
-                          <Minus size={13} />
-                        </button>
-                        <span className="tabular-nums" style={{ fontWeight: 700, minWidth: '18px', textAlign: 'center', fontSize: '0.82rem' }}>{item.quantity}</span>
-                        <button type="button" onClick={() => updateBagQty(item.id, 1)} aria-label="Increase quantity" className="btn-ghost" style={{ padding: '0.25rem' }}>
-                          <Plus size={13} />
-                        </button>
-                        <button type="button" onClick={() => updateBagQty(item.id, -999)} aria-label="Remove item" className="btn-ghost" style={{ padding: '0.25rem' }}>
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
+                      <GroceryQtyStepper item={{ ...item, track: 'TRACK_A_DIRECT' }} bag={bag} onAdd={addToBag} onUpdateQty={updateBagQty} />
                     </div>
                   ))}
                 </div>
 
-                <div style={{ padding: '0.85rem', borderRadius: '0.9rem', backgroundColor: 'var(--surface-muted)', display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                  <input
-                    type="text"
-                    value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value)}
-                    placeholder="Promo code (optional)"
-                    aria-label="Promo code"
-                    style={{
-                      padding: '0.55rem 0.75rem',
-                      borderRadius: '0.6rem',
-                      border: '1px solid var(--border)',
-                      backgroundColor: theme === 'dark' ? '#0D1317' : '#FFFFFF',
-                      color: 'var(--text)',
-                      fontSize: '0.84rem',
-                    }}
-                  />
-                  {vaultDiscountPct > 0 && (
-                    <div style={{ fontSize: '0.76rem', color: 'var(--accent)', fontWeight: 700 }}>
-                      Calm Rewards applied: {vaultDiscountPct}%
-                    </div>
-                  )}
-                </div>
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value)}
+                  placeholder="Promo code (optional)"
+                  aria-label="Promo code"
+                  style={{
+                    padding: '0.65rem 0.85rem',
+                    borderRadius: '0.75rem',
+                    border: '2px solid var(--border)',
+                    backgroundColor: 'var(--surface)',
+                    color: 'var(--text)',
+                    fontSize: '0.85rem',
+                  }}
+                />
 
                 {quote && (
-                  <div className="tabular-nums" style={{ padding: '0.95rem', borderRadius: '0.9rem', border: '1px solid var(--border)', fontSize: '0.86rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <div className="tabular-nums" style={{ padding: '0.95rem', borderRadius: '0.95rem', border: '2px solid var(--border)', fontSize: '0.86rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span>Subtotal</span>
                       <strong>${quote.subtotal_usd.toFixed(2)}</strong>
                     </div>
                     {quote.discount_usd > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--mint-strong)' }}>
                         <span>Savings</span>
                         <strong>-${quote.discount_usd.toFixed(2)}</strong>
                       </div>
@@ -1211,7 +1601,7 @@ export default function App() {
                       <span>Shipping</span>
                       <strong>{quote.shipping_usd === 0 ? 'Free' : `$${quote.shipping_usd.toFixed(2)}`}</strong>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: '0.45rem', fontSize: '1.04rem', fontWeight: 800 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1.5px dashed var(--border-subtle)', paddingTop: '0.45rem', fontSize: '1.06rem', fontWeight: 800 }}>
                       <span>Total</span>
                       <span>${quote.total_usd.toFixed(2)}</span>
                     </div>
@@ -1229,7 +1619,7 @@ export default function App() {
                 </button>
 
                 {checkoutStatus && (
-                  <div style={{ padding: '0.75rem', borderRadius: '0.75rem', backgroundColor: 'var(--blush-soft)', color: 'var(--blush)', fontSize: '0.8rem', fontWeight: 600 }}>
+                  <div style={{ padding: '0.75rem', borderRadius: '0.75rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--accent-soft)', color: 'var(--text)', fontSize: '0.8rem', fontWeight: 700 }}>
                     {checkoutStatus}
                   </div>
                 )}
@@ -1239,61 +1629,23 @@ export default function App() {
         </div>
       )}
 
-      {/* Discreet Studio Style & Layout Switcher Pill (Bottom-Left) */}
-      <div style={{ position: 'fixed', bottom: '1rem', left: '1rem', zIndex: 740 }}>
-        {styleDockOpen ? (
-          <div
-            className="surface-card"
-            style={{
-              padding: '0.75rem',
-              width: '250px',
-              backgroundColor: theme === 'dark' ? '#151E24' : '#FFFFFF',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.4rem',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.25rem' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 800 }}>Layout &amp; Style Options</span>
-              <button type="button" onClick={() => setStyleDockOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}>
-                <X size={15} />
-              </button>
-            </div>
-            {STYLE_PRESETS.map((sp) => {
-              const active = stylePreset === sp.id;
-              return (
-                <button
-                  key={sp.id}
-                  type="button"
-                  onClick={() => setStylePreset(sp.id)}
-                  className={active ? 'btn-primary' : 'btn-ghost'}
-                  style={{ padding: '0.5rem 0.7rem', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '1px' }}
-                >
-                  <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{sp.name}</span>
-                  <span style={{ fontSize: '0.68rem', opacity: 0.85, fontWeight: 500 }}>{sp.note}</span>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setStyleDockOpen(true)}
-            className="btn-ghost"
-            style={{
-              padding: '0.5rem 0.85rem',
-              fontSize: '0.78rem',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              backgroundColor: theme === 'dark' ? '#151E24' : '#FFFFFF',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-            }}
-          >
-            <Palette size={14} style={{ color: 'var(--accent)' }} />
-            <span>Preview 4 Styles</span>
-          </button>
-        )}
+      {/* FLOATING QUICK DESIGN SWITCHER PILL (Bottom-Left) */}
+      <div style={{ position: 'fixed', bottom: '1.1rem', left: '1.1rem', zIndex: 740 }}>
+        <button
+          type="button"
+          onClick={() => setDesignDockOpen((o) => !o)}
+          className="btn-ghost"
+          style={{
+            padding: '0.52rem 0.9rem',
+            fontSize: '0.78rem',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.42rem',
+          }}
+        >
+          <Sparkles size={14} style={{ color: 'var(--accent)' }} />
+          <span>4 Layouts &amp; 4 Emote Packs</span>
+        </button>
       </div>
 
       <LegalViews open={legalOpen} initialTab={legalTab} onClose={() => setLegalOpen(false)} />
