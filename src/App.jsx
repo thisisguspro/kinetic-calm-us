@@ -231,7 +231,7 @@ export default function App() {
       document.removeEventListener('scroll', handleScroll, { capture: true });
       window.removeEventListener('resize', handleScroll);
     };
-  }, [heroItems.length]);
+  }, [catalog.length]);
 
   const jumpToHeroSlide = (targetIdx) => {
     const el = heroTrackRef.current;
