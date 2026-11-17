@@ -43,7 +43,6 @@ export function GoogleSignInButton({ referralCode = '', asAdmin = false, label =
   if (referralCode) qs.set('ref', referralCode);
   if (asAdmin) {
     qs.set('admin', '1');
-    qs.set('role', 'admin');
   }
   const href = `/api/auth/google${qs.toString() ? `?${qs.toString()}` : ''}`;
   return (
@@ -165,12 +164,10 @@ export function CustomerAccountModal({
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
                 <GoogleSignInButton referralCode={referralCodeFromUrl} label="Continue with Google" />
-                {authState?.localhost_dev_helper_enabled && (
-                  <GoogleSignInButton
-                    referralCode={referralCodeFromUrl}
-                    asAdmin
-                    label="Local Dev: Sign in as Founder Admin"
-                  />
+                {authState && authState.google_oauth_live_configured === false && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                    Note: Live Google OAuth activates automatically once <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> are added to your Render environment variables.
+                  </div>
                 )}
               </div>
             </div>

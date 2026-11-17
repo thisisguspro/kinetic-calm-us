@@ -1,14 +1,38 @@
+# Render Blueprint specification for Kinetic Calm US
+# Documentation: https://render.com/docs/blueprint-spec
+
 services:
   - type: web
     name: kinetic-calm-us
     runtime: node
+    region: oregon
     plan: free
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
     envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 3007
       - key: SESSION_SECRET
         generateValue: true
+      - key: OWNER_GOOGLE_EMAILS
+        value: gmromeu13@gmail.com,thisisguspro@gmail.com
+      - key: SUPPORT_EMAIL
+        value: gmromeu13@gmail.com
+
+      # Google OAuth 2.0 (Customer Order Tracking, Calm Club Referrals & Admin Console Login)
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        sync: false
+
+      # Stripe US Direct Checkout
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false

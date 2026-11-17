@@ -20,10 +20,10 @@ export const FREE_GIFT_THRESHOLD_USD = 85.0;
 export const STANDARD_US_SHIPPING_USD = 6.95;
 
 export const SUPER_ADMIN_EMAILS = Object.freeze([
-  'thisisguspro@gmail.com',
   'gmromeu13@gmail.com',
+  'thisisguspro@gmail.com',
 ]);
-export const MAIN_SUPER_ADMIN_EMAIL = 'thisisguspro@gmail.com';
+export const MAIN_SUPER_ADMIN_EMAIL = 'gmromeu13@gmail.com';
 
 export function normalizeEmail(raw) {
   return String(raw || '').normalize('NFKC').trim().toLowerCase().slice(0, 128);

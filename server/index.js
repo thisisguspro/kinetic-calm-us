@@ -28,10 +28,23 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..');
+const ENV_FILE = path.join(ROOT_DIR, '.env');
+if (fs.existsSync(ENV_FILE)) {
+  for (const line of fs.readFileSync(ENV_FILE, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    const k = trimmed.slice(0, eqIdx).trim();
+    const v = trimmed.slice(eqIdx + 1).trim().replace(/^['"]|['"]$/g, '');
+    if (k && process.env[k] === undefined) process.env[k] = v;
+  }
+}
+
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const PORT = Number(process.env.PORT || 3007);
 const IS_PROD = process.env.NODE_ENV === 'production';
+const BIND_HOST = IS_PROD ? '0.0.0.0' : '127.0.0.1';
 
 const isRealCred = (val) =>
   Boolean(
@@ -116,7 +129,7 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      secure: IS_PROD && Boolean(process.env.FORCE_HTTPS_COOKIE),
+      secure: IS_PROD,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     },
   })
@@ -250,19 +263,7 @@ app.get('/api/auth/google', (req, res, next) => {
   if (hasGoogleCreds) {
     return passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
   }
-  if (!isLocalhostRequest(req)) {
-    return res.redirect('/?auth_notice=google_oauth_pending');
-  }
-  // Localhost-only preview helper when GOOGLE_CLIENT_ID is not yet set in .env
-  const wantAdmin = req.query.role === 'admin' || req.query.admin === '1';
-  const devUser = upsertGoogleUser({
-    googleId: wantAdmin ? 'google-local-founder-admin' : 'google-local-customer-preview',
-    email: wantAdmin ? MAIN_SUPER_ADMIN_EMAIL : 'shopper.preview@kineticcalm.us',
-    name: wantAdmin ? 'Gustavo (Founder Super-Admin)' : 'Shopper Preview (Google Account)',
-    avatarUrl: null,
-    referredByCode: ref || null,
-  });
-  return loginWithSessionRegeneration(req, res, next, devUser, returnTo);
+  return res.redirect(`${returnTo}&auth_notice=google_oauth_pending`);
 });
 
 app.get(
@@ -287,7 +288,6 @@ app.get('/api/auth/me', (req, res) => {
   res.json({
     authenticated: Boolean(fresh),
     google_oauth_live_configured: hasGoogleCreds,
-    localhost_dev_helper_enabled: !hasGoogleCreds && isLocalhostRequest(req),
     user: fresh || null,
   });
 });
@@ -566,7 +566,6 @@ app.get('/sitemap.xml', (req, res) => {
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
       `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
       `  <url><loc>${baseUrl}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n` +
-      `  <url><loc>${baseUrl}/#feel-lab</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n` +
       `  <url><loc>${baseUrl}/#collection</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n` +
       `  <url><loc>${baseUrl}/#legal</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>\n` +
       `</urlset>\n`
@@ -709,6 +708,6 @@ app.get('*', (_req, res) => {
   return res.status(503).send('KINETIC CALM frontend build missing — run npm run build.');
 });
 
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`KINETIC CALM US storefront listening on http://127.0.0.1:${PORT}`);
+app.listen(PORT, BIND_HOST, () => {
+  console.log(`KINETIC CALM US storefront listening on http://${BIND_HOST}:${PORT}`);
 });

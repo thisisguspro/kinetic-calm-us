@@ -10,48 +10,21 @@ import {
   CheckCircle2,
   Lock,
   ArrowDown,
-  SlidersHorizontal,
-  Sparkles,
   PackageCheck,
   User,
   ShieldCheck,
   ExternalLink,
 } from 'lucide-react';
-import TactileFeelLab from './TactileFeelLab.jsx';
 import LegalViews from './LegalViews.jsx';
 import {
   CustomerAccountModal,
   AdminConsoleModal,
 } from './AccountAndAdminModals.jsx';
 import {
-  EMOTE_PACK_OPTIONS,
   SensoryStatCluster,
   GroceryQtyStepper,
   classifySoundProfile,
 } from './SensoryMetersAndQty.jsx';
-
-const LAYOUT_OPTIONS = [
-  {
-    id: 'bento_arcade',
-    name: 'Layout 1: Clay-Cloud × Neo-Pop Bento',
-    note: 'Pinned 4-Item Scroll Hero + Spotlight Bento + Play Lab + Bundle Bar',
-  },
-  {
-    id: 'split_shelf',
-    name: 'Layout 2: Sticky Mood-Finder Split Shelf',
-    note: 'Pinned Hero + Left Sticky Sensory Mood & Sound Filter + 2-Up Shelf',
-  },
-  {
-    id: 'category_lanes',
-    name: 'Layout 3: Tactile Category Swimlanes',
-    note: 'Pinned Hero + Full Soundstage + Horizontal Category Reel Lanes',
-  },
-  {
-    id: 'stat_deck',
-    name: 'Layout 4: Collectible Stat-Card & Bundle Deck',
-    note: 'Pinned Hero + Live 3-Slot Bundle Builder + Full Sensory Spec Cards',
-  },
-];
 
 const COLLECTIONS = [
   { id: 'all', label: 'All 12 Toys' },
@@ -96,34 +69,7 @@ const HERO_SLIDE_THEMES = [
 ];
 
 export default function App() {
-  const [layoutMode, setLayoutMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const q = new URLSearchParams(window.location.search).get('layout');
-      if (q && LAYOUT_OPTIONS.some((l) => l.id === q)) return q;
-      try {
-        const saved = localStorage.getItem('kc_layout_v4');
-        if (saved && LAYOUT_OPTIONS.some((l) => l.id === saved)) return saved;
-      } catch {}
-    }
-    return 'stat_deck';
-  });
-
-  const [emotePack, setEmotePack] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const q = new URLSearchParams(window.location.search).get('emotes');
-      if (q && EMOTE_PACK_OPTIONS.some((e) => e.id === q)) return q;
-      try {
-        const saved = localStorage.getItem('kc_emote_pack_v4');
-        if (saved && EMOTE_PACK_OPTIONS.some((e) => e.id === saved)) return saved;
-      } catch {}
-    }
-    return 'paw_wave';
-  });
-
-  const isStudioPreview = useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    return new URLSearchParams(window.location.search).get('studio') === '1';
-  }, []);
+  const emotePack = 'paw_wave';
 
   const [theme, setTheme] = useState(() => {
     try {
@@ -134,7 +80,6 @@ export default function App() {
   });
 
   const [splashState, setSplashState] = useState(null);
-  const [designDockOpen, setDesignDockOpen] = useState(false);
 
   // Pinned 4-Slide Scroll Showcase State
   const heroTrackRef = useRef(null);
@@ -162,7 +107,7 @@ export default function App() {
   const [checkoutStatus, setCheckoutStatus] = useState('');
   const [toastMsg, setToastMsg] = useState('');
 
-  const [authState, setAuthState] = useState({ authenticated: false, user: null, localhost_dev_helper_enabled: false });
+  const [authState, setAuthState] = useState({ authenticated: false, user: null });
   const [accountOpen, setAccountOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [bundleConfig, setBundleConfig] = useState({ active: true, min_items: 3, discount_pct: 12 });
@@ -190,18 +135,6 @@ export default function App() {
   const [newsletterMsg, setNewsletterMsg] = useState('');
 
   useEffect(() => {
-    try {
-      localStorage.setItem('kc_layout_v4', layoutMode);
-    } catch {}
-  }, [layoutMode]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('kc_emote_pack_v4', emotePack);
-    } catch {}
-  }, [emotePack]);
-
-  useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     try {
       localStorage.setItem('kc_theme', theme);
@@ -219,7 +152,8 @@ export default function App() {
       if (e.key === 'Escape') {
         setSelectedProduct(null);
         setBagOpen(false);
-        setDesignDockOpen(false);
+        setAccountOpen(false);
+        setAdminOpen(false);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -705,20 +639,6 @@ export default function App() {
             <a href="#collection" className="font-neo" style={{ textDecoration: 'none', color: 'var(--text)', fontWeight: 700, fontSize: '0.88rem' }}>
               Shop ({catalog.length || 12})
             </a>
-            <a href="#feel-lab" className="font-neo" style={{ textDecoration: 'none', color: 'var(--text)', fontWeight: 700, fontSize: '0.88rem' }}>
-              Play Lab
-            </a>
-            {isStudioPreview && (
-              <button
-                type="button"
-                onClick={() => setDesignDockOpen((o) => !o)}
-                className="btn-ghost"
-                style={{ padding: '0.38rem 0.75rem', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-              >
-                <SlidersHorizontal size={13} />
-                <span>Layouts &amp; Emotes</span>
-              </button>
-            )}
           </nav>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.48rem' }}>
@@ -776,73 +696,6 @@ export default function App() {
             }}
           >
             Invited by {referralBanner.referrer_first_name}: 10% Friend Referral Discount applies automatically to your first order!
-          </div>
-        )}
-
-        {/* LIVE DESIGN LAB DRAWER (Switch 4 New Layouts + 4 Emote/Badge Packs Instantly!) */}
-        {designDockOpen && (
-          <div
-            style={{
-              borderTop: '2px solid var(--border)',
-              backgroundColor: 'var(--surface)',
-              padding: '0.9rem 1.25rem',
-            }}
-          >
-            <div
-              style={{
-                maxWidth: '1260px',
-                margin: '0 auto',
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))',
-                gap: '1rem',
-              }}
-            >
-              <div>
-                <div className="font-neo" style={{ fontSize: '0.74rem', fontWeight: 800, marginBottom: '0.45rem', color: 'var(--text-muted)' }}>
-                  PICK PAGE LAYOUT (ALL MIX CLAY &amp; CLOUD + NEO-POP BOXES/FONTS):
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
-                  {LAYOUT_OPTIONS.map((lo) => {
-                    const active = layoutMode === lo.id;
-                    return (
-                      <button
-                        key={lo.id}
-                        type="button"
-                        onClick={() => setLayoutMode(lo.id)}
-                        className={active ? 'btn-primary' : 'btn-ghost'}
-                        style={{ padding: '0.48rem 0.65rem', textAlign: 'left', fontSize: '0.75rem' }}
-                      >
-                        <div style={{ fontWeight: 800 }}>{lo.name}</div>
-                        <div style={{ fontSize: '0.65rem', opacity: 0.85, fontWeight: 500 }}>{lo.note}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <div className="font-neo" style={{ fontSize: '0.74rem', fontWeight: 800, marginBottom: '0.45rem', color: 'var(--text-muted)' }}>
-                  PICK SENSORY EMOTE / RATING ICON PACK (SQUISH + SOUND + $):
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
-                  {EMOTE_PACK_OPTIONS.map((ep) => {
-                    const active = emotePack === ep.id;
-                    return (
-                      <button
-                        key={ep.id}
-                        type="button"
-                        onClick={() => setEmotePack(ep.id)}
-                        className={active ? 'btn-primary' : 'btn-ghost'}
-                        style={{ padding: '0.48rem 0.65rem', textAlign: 'left', fontSize: '0.75rem' }}
-                      >
-                        <div style={{ fontWeight: 800 }}>{ep.name}</div>
-                        <div style={{ fontSize: '0.65rem', opacity: 0.85, fontWeight: 500 }}>{ep.note}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </header>
@@ -952,7 +805,7 @@ export default function App() {
                         Full Specs
                       </button>
                       <a
-                        href="#feel-lab"
+                        href="#collection"
                         className="btn-ghost"
                         style={{
                           padding: '0.78rem 1.1rem',
@@ -963,7 +816,7 @@ export default function App() {
                           gap: '0.3rem',
                         }}
                       >
-                        <span>Skip to Play Lab</span>
+                        <span>Shop All 12 Toys</span>
                         <ArrowDown size={14} />
                       </a>
                     </div>
@@ -1119,188 +972,9 @@ export default function App() {
         </div>
 
         {/* ===================================================================
-            LAYOUT 1 (DEFAULT): CLAY-CLOUD × NEO-POP BENTO ARCADE
+            COLLECTIBLE STAT-CARD & LIVE 3-PIECE CALM KIT BUNDLE DECK
             =================================================================== */}
-        {layoutMode === 'bento_arcade' && (
-          <>
-            <TactileFeelLab />
-
-            <section id="collection" style={{ maxWidth: '1240px', margin: '0 auto', padding: '1.8rem 1.25rem 2.6rem' }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.85rem', marginBottom: '1.25rem' }}>
-                <div>
-                  <h2 className="font-display" style={{ margin: 0, fontSize: 'clamp(1.65rem, 2.8vw, 2.25rem)', fontWeight: 800 }}>
-                    Shop the Sensory Arcade
-                  </h2>
-                  <div style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>
-                    Filter by feel or sound profile — click + Add to adjust quantities right on any card.
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.42rem' }}>
-                  {COLLECTIONS.map((col) => (
-                    <button
-                      key={col.id}
-                      type="button"
-                      onClick={() => setActiveCollection(col.id)}
-                      className={activeCollection === col.id ? 'btn-primary' : 'btn-ghost'}
-                      style={{ padding: '0.46rem 0.88rem', fontSize: '0.79rem' }}
-                    >
-                      {col.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Sound / Noise Quick Filter Pills */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.45rem', marginBottom: '1.35rem' }}>
-                <span className="font-neo" style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--text-muted)' }}>
-                  Sound Check:
-                </span>
-                {SOUND_FILTERS.map((sf) => (
-                  <button
-                    key={sf.id}
-                    type="button"
-                    onClick={() => setSoundFilter(sf.id)}
-                    className={soundFilter === sf.id ? 'btn-primary' : 'btn-ghost'}
-                    style={{ padding: '0.32rem 0.72rem', fontSize: '0.74rem' }}
-                  >
-                    {sf.label}
-                  </button>
-                ))}
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(282px, 1fr))',
-                  gap: '1.3rem',
-                }}
-              >
-                {filteredItems.map((item, idx) =>
-                  renderProductCard(item, activeCollection === 'all' && soundFilter === 'all' && idx === 0, false)
-                )}
-              </div>
-            </section>
-          </>
-        )}
-
-        {/* ===================================================================
-            LAYOUT 2: STICKY MOOD-FINDER & TESTER SPLIT SHELF
-            =================================================================== */}
-        {layoutMode === 'split_shelf' && (
-          <section id="collection" style={{ maxWidth: '1260px', margin: '0 auto', padding: '2rem 1.25rem 2.8rem' }}>
-            <div
-              className="split-lookbook-grid"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '340px 1fr',
-                gap: '1.6rem',
-                alignItems: 'start',
-              }}
-            >
-              <aside
-                className="surface-card split-sticky-sidebar"
-                style={{
-                  position: 'sticky',
-                  top: '84px',
-                  padding: '1.2rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1rem',
-                }}
-              >
-                <div>
-                  <div className="font-display" style={{ fontSize: '1.3rem', fontWeight: 800 }}>
-                    Find Your Exact Feel
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    Pick category &amp; classroom/office noise level:
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                  {COLLECTIONS.map((col) => (
-                    <button
-                      key={col.id}
-                      type="button"
-                      onClick={() => setActiveCollection(col.id)}
-                      className={activeCollection === col.id ? 'btn-primary' : 'btn-ghost'}
-                      style={{ padding: '0.4rem 0.75rem', fontSize: '0.76rem' }}
-                    >
-                      {col.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div style={{ borderTop: '1.5px dashed var(--border-subtle)', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.38rem' }}>
-                  <span className="font-neo" style={{ fontSize: '0.74rem', fontWeight: 800 }}>NOISE / SOUND LEVEL:</span>
-                  {SOUND_FILTERS.map((sf) => (
-                    <button
-                      key={sf.id}
-                      type="button"
-                      onClick={() => setSoundFilter(sf.id)}
-                      className={soundFilter === sf.id ? 'btn-primary' : 'btn-ghost'}
-                      style={{ padding: '0.42rem 0.7rem', fontSize: '0.75rem', textAlign: 'left' }}
-                    >
-                      {sf.label}
-                    </button>
-                  ))}
-                </div>
-              </aside>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.6rem' }}>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                    gap: '1.25rem',
-                  }}
-                >
-                  {filteredItems.map((item) => renderProductCard(item, false, true))}
-                </div>
-                <TactileFeelLab />
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* ===================================================================
-            LAYOUT 3: TACTILE CATEGORY SWIMLANES & FULL SOUNDSTAGE
-            =================================================================== */}
-        {layoutMode === 'category_lanes' && (
-          <>
-            <TactileFeelLab />
-
-            <section id="collection" style={{ maxWidth: '1260px', margin: '0 auto', padding: '1.5rem 1.25rem 2.8rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-              {COLLECTIONS.filter((c) => c.id !== 'all').map((lane) => {
-                const laneItems = catalog.filter((it) => it.collection === lane.id);
-                if (!laneItems.length) return null;
-                return (
-                  <div key={lane.id}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.75rem' }}>
-                      <h2 className="font-display" style={{ margin: 0, fontSize: '1.55rem', fontWeight: 800 }}>
-                        {lane.label}
-                      </h2>
-                      <span className="font-neo" style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                        {laneItems.length} Curated Objects →
-                      </span>
-                    </div>
-                    <div className="swimlane-scroll">
-                      {laneItems.map((item) => renderProductCard(item, false, false))}
-                    </div>
-                  </div>
-                );
-              })}
-            </section>
-          </>
-        )}
-
-        {/* ===================================================================
-            LAYOUT 4: COLLECTIBLE STAT-CARD & LIVE BUNDLE DECK (LOCKED FLAGSHIP)
-            =================================================================== */}
-        {layoutMode === 'stat_deck' && (
-          <>
-            <section style={{ maxWidth: '1240px', margin: '0 auto', padding: '2rem 1.25rem 0.5rem' }}>
+        <section style={{ maxWidth: '1240px', margin: '0 auto', padding: '2rem 1.25rem 0.5rem' }}>
               <div
                 className="surface-card"
                 style={{
@@ -1423,10 +1097,6 @@ export default function App() {
                 {filteredItems.map((item) => renderProductCard(item, false, true))}
               </div>
             </section>
-
-            <TactileFeelLab />
-          </>
-        )}
 
         {/* CLEAN HUMAN NEWSLETTER BOX */}
         <section style={{ maxWidth: '720px', margin: '0 auto', padding: '1.6rem 1.25rem 4.5rem' }}>
@@ -1836,27 +1506,6 @@ export default function App() {
               </>
             )}
           </div>
-        </div>
-      )}
-
-      {/* FLOATING QUICK DESIGN SWITCHER PILL (Only shown in ?studio=1 preview mode) */}
-      {isStudioPreview && (
-        <div style={{ position: 'fixed', bottom: '1.1rem', left: '1.1rem', zIndex: 740 }}>
-          <button
-            type="button"
-            onClick={() => setDesignDockOpen((o) => !o)}
-            className="btn-ghost"
-            style={{
-              padding: '0.52rem 0.9rem',
-              fontSize: '0.78rem',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.42rem',
-            }}
-          >
-            <Sparkles size={14} style={{ color: 'var(--accent)' }} />
-            <span>4 Layouts &amp; 4 Emote Packs</span>
-          </button>
         </div>
       )}
 
