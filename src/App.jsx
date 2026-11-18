@@ -187,8 +187,26 @@ export default function App() {
       const openTarget = params.get('open');
       if (openTarget === 'account') setAccountOpen(true);
       if (openTarget === 'admin') setAdminOpen(true);
-      if (openTarget && window.history?.replaceState) {
+      const checkoutFlag = params.get('checkout');
+      const orderId = params.get('order');
+      const sessionId = params.get('session_id');
+      if (checkoutFlag === 'success' && orderId && sessionId) {
+        fetch(`/api/checkout/verify?order=${encodeURIComponent(orderId)}&session_id=${encodeURIComponent(sessionId)}`)
+          .then((r) => r.json())
+          .then((v) => {
+            if (v?.paid && v?.order) {
+              setBag([]);
+              setBagOpen(true);
+              setCheckoutStatus(`Order ${v.order.id} paid & confirmed! ${v.order.offer_fulfillment_note || ''}`);
+            }
+          })
+          .catch(() => {});
+      }
+      if ((openTarget || checkoutFlag) && window.history?.replaceState) {
         params.delete('open');
+        params.delete('checkout');
+        params.delete('order');
+        params.delete('session_id');
         const qs = params.toString();
         window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
       }
@@ -362,6 +380,11 @@ export default function App() {
         }),
       });
       const data = await r.json();
+      if (r.ok && data?.checkout_url) {
+        setCheckoutStatus('Redirecting to secure Stripe Checkout...');
+        window.location.assign(data.checkout_url);
+        return;
+      }
       setCheckoutStatus(data?.message || data?.error || 'Checkout ready.');
     } catch {
       setCheckoutStatus('Unable to connect right now.');

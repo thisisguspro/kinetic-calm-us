@@ -115,7 +115,16 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '64kb' }));
+app.use(
+  express.json({
+    limit: '64kb',
+    verify: (req, _res, buf) => {
+      if (req.originalUrl && req.originalUrl.startsWith('/api/webhooks/stripe')) {
+        req.rawBody = Buffer.from(buf);
+      }
+    },
+  })
+);
 
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 app.use(
@@ -232,6 +241,7 @@ function isTrustedOriginHeader(urlLike, hostHeader) {
 
 app.use('/api', (req, res, next) => {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
+  if (req.path.startsWith('/webhooks/stripe')) return next();
   const sfs = String(req.get('sec-fetch-site') || '').toLowerCase();
   if (sfs === 'cross-site') {
     return res.status(403).json({ error: 'CSRF cross-site write blocked.' });
@@ -664,7 +674,53 @@ app.post('/api/waitlist', (req, res) => {
   });
 });
 
-app.post('/api/checkout', (req, res) => {
+function finalizePaidOrder(store, orderId, stripeSession) {
+  const idx = store.orders.findIndex((o) => o.id === orderId);
+  if (idx < 0) return null;
+  const order = store.orders[idx];
+  if (order.status === 'PAID_CONFIRMED') return order;
+
+  const nowIso = new Date().toISOString();
+  const customerEmail = normalizeEmail(stripeSession?.customer_details?.email || stripeSession?.customer_email || order.customer_email);
+  order.status = 'PAID_CONFIRMED';
+  order.paid_at = nowIso;
+  order.customer_email = customerEmail || order.customer_email;
+  order.stripe_payment_intent_id = stripeSession?.payment_intent || order.stripe_payment_intent_id || null;
+  order.shipping_details = stripeSession?.shipping_details || order.shipping_details || null;
+  order.offer_fulfilled = true;
+  order.offer_fulfillment_note = order.free_gift_unlocked
+    ? `${order.free_gift_label || 'Free Calm Strip Travel Pack'} packed with order + ${order.discount_source || 'standard pricing'} applied.`
+    : `${order.discount_source && order.discount_source !== 'NONE' ? `${order.discount_source} applied` : 'Direct order confirmed'}.`;
+
+  if (customerEmail && store.customers?.[customerEmail]) {
+    const cust = store.customers[customerEmail];
+    const u = store.users?.[cust.user_id];
+    if (u) {
+      if (String(order.discount_source || '').startsWith('CALM_VAULT_')) {
+        u.unlocked_vault_pct = 0;
+        cust.max_unlocked_pct = 0;
+      }
+      if (String(order.discount_source || '').startsWith('FRIEND_REFERRAL_')) {
+        u.friend_welcome_used = true;
+        cust.friend_welcome_eligible = false;
+      }
+    }
+  }
+  if (order.referral_code) {
+    const owner = Object.values(store.users || {}).find((u) => u.referral_code === order.referral_code);
+    if (owner && normalizeEmail(owner.email) !== customerEmail) {
+      owner.referrals_completed_count = Number(owner.referrals_completed_count || 0) + 1;
+      owner.unlocked_vault_pct = Math.min(MAX_LOYALTY_DISCOUNT_PCT, Number(owner.unlocked_vault_pct || 0) + 10);
+      if (store.customers?.[normalizeEmail(owner.email)]) {
+        store.customers[normalizeEmail(owner.email)].max_unlocked_pct = owner.unlocked_vault_pct;
+      }
+    }
+  }
+  store.orders[idx] = { ...order, updated_at: nowIso };
+  return store.orders[idx];
+}
+
+app.post('/api/checkout', async (req, res) => {
   const { items, promo_code, vault_discount_pct, email, referral_code } = req.body || {};
   const sessionUser = req.user?.id ? getUserById(req.user.id) : null;
   const cleanEmail = normalizeEmail(sessionUser?.email || email);
@@ -676,20 +732,161 @@ app.post('/api/checkout', (req, res) => {
   if (!quote.margin_guard_ok) {
     return res.status(400).json({ error: 'Order rejected by server-side 20% minimum net margin guard.' });
   }
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const stripeKey = isRealCred(process.env.STRIPE_SECRET_KEY) ? process.env.STRIPE_SECRET_KEY.trim() : '';
+  if (!stripeKey) {
     return res.status(503).json({
       ok: false,
       mode: 'STRIPE_KEY_REQUIRED',
       quote,
-      message:
-        'Live Stripe US Checkout requires STRIPE_SECRET_KEY in environment variables. Zero-Fake-Data Law blocks creating synthetic paid orders.',
+      message: 'Live Stripe US Checkout requires STRIPE_SECRET_KEY in environment variables.',
     });
   }
-  return res.status(501).json({
-    ok: false,
-    quote,
-    message: 'Stripe webhook settlement handler ready once live STRIPE_SECRET_KEY is activated.',
-  });
+
+  const orderId = `KC-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+  const origin = `${req.protocol}://${req.get('host')}`;
+  const params = new URLSearchParams();
+  params.set('mode', 'payment');
+  params.set('success_url', `${origin}/?checkout=success&order=${encodeURIComponent(orderId)}&session_id={CHECKOUT_SESSION_ID}`);
+  params.set('cancel_url', `${origin}/?checkout=cancelled&order=${encodeURIComponent(orderId)}`);
+  params.set('shipping_address_collection[allowed_countries][0]', 'US');
+  params.set('payment_method_types[0]', 'card');
+  if (cleanEmail && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
+    params.set('customer_email', cleanEmail);
+  }
+
+  const discountedSub = Math.max(0, Number((quote.subtotal_usd - quote.discount_usd).toFixed(2)));
+  params.set('line_items[0][price_data][currency]', 'usd');
+  params.set('line_items[0][price_data][unit_amount]', String(Math.max(50, Math.round(discountedSub * 100))));
+  params.set(
+    'line_items[0][price_data][product_data][name]',
+    `Kinetic Calm Sensory Order (${quote.total_direct_qty} items)${quote.discount_source !== 'NONE' ? ` — ${quote.discount_source}` : ''}`
+  );
+  params.set('line_items[0][quantity]', '1');
+
+  let lineIdx = 1;
+  if (quote.shipping_usd > 0) {
+    params.set(`line_items[${lineIdx}][price_data][currency]`, 'usd');
+    params.set(`line_items[${lineIdx}][price_data][unit_amount]`, String(Math.round(quote.shipping_usd * 100)));
+    params.set(`line_items[${lineIdx}][price_data][product_data][name]`, 'US Tracked Standard Shipping');
+    params.set(`line_items[${lineIdx}][quantity]`, '1');
+    lineIdx += 1;
+  }
+  if (quote.free_gift_unlocked) {
+    params.set(`line_items[${lineIdx}][price_data][currency]`, 'usd');
+    params.set(`line_items[${lineIdx}][price_data][unit_amount]`, '0');
+    params.set(`line_items[${lineIdx}][price_data][product_data][name]`, `BONUS UNLOCKED: ${quote.free_gift_label}`);
+    params.set(`line_items[${lineIdx}][quantity]`, '1');
+  }
+
+  params.set('metadata[order_id]', orderId);
+  params.set('metadata[discount_source]', quote.discount_source);
+  params.set('metadata[free_gift_unlocked]', String(Boolean(quote.free_gift_unlocked)));
+  if (effectiveRef) params.set('metadata[referral_code]', effectiveRef);
+
+  try {
+    const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${stripeKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Idempotency-Key': `kc-checkout-${orderId}`,
+      },
+      body: params.toString(),
+    });
+    const sessionData = await stripeRes.json();
+    if (!stripeRes.ok || !sessionData?.url) {
+      return res.status(502).json({ error: sessionData?.error?.message || 'Unable to initialize Stripe Checkout session.' });
+    }
+    const store = readStore();
+    store.orders.push({
+      id: orderId,
+      customer_email: cleanEmail || '',
+      items: quote.items,
+      subtotal_usd: quote.subtotal_usd,
+      discount_usd: quote.discount_usd,
+      discount_source: quote.discount_source,
+      shipping_usd: quote.shipping_usd,
+      total_usd: quote.total_usd,
+      free_gift_unlocked: Boolean(quote.free_gift_unlocked),
+      free_gift_label: quote.free_gift_label,
+      referral_code: effectiveRef || null,
+      stripe_session_id: sessionData.id,
+      status: 'PENDING_PAYMENT',
+      offer_fulfilled: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    writeStore(store);
+    return res.json({
+      ok: true,
+      order_id: orderId,
+      stripe_session_id: sessionData.id,
+      checkout_url: sessionData.url,
+      quote,
+    });
+  } catch (err) {
+    return res.status(502).json({ error: `Stripe gateway error: ${err.message}` });
+  }
+});
+
+app.get('/api/checkout/verify', async (req, res) => {
+  const orderId = String(req.query.order || '').trim().slice(0, 64);
+  const sessionId = String(req.query.session_id || '').trim().slice(0, 128);
+  if (!orderId || !sessionId) {
+    return res.status(400).json({ error: 'Missing order or session_id.' });
+  }
+  const stripeKey = isRealCred(process.env.STRIPE_SECRET_KEY) ? process.env.STRIPE_SECRET_KEY.trim() : '';
+  if (!stripeKey) {
+    return res.status(503).json({ error: 'Stripe key not configured.' });
+  }
+  try {
+    const r = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, {
+      headers: { Authorization: `Bearer ${stripeKey}` },
+    });
+    const sessionData = await r.json();
+    if (!r.ok) {
+      return res.status(400).json({ error: sessionData?.error?.message || 'Session lookup failed.' });
+    }
+    const store = readStore();
+    if (sessionData.payment_status === 'paid' && sessionData.metadata?.order_id === orderId) {
+      const updated = finalizePaidOrder(store, orderId, sessionData);
+      writeStore(store);
+      return res.json({ ok: true, paid: true, order: updated });
+    }
+    return res.json({ ok: true, paid: false, status: sessionData.payment_status });
+  } catch (err) {
+    return res.status(502).json({ error: err.message });
+  }
+});
+
+app.post('/api/webhooks/stripe', (req, res) => {
+  const sigHeader = String(req.headers['stripe-signature'] || '');
+  const webhookSecret = isRealCred(process.env.STRIPE_WEBHOOK_SECRET) ? process.env.STRIPE_WEBHOOK_SECRET.trim() : '';
+  const rawBuf = req.rawBody;
+  if (webhookSecret) {
+    if (!sigHeader || !rawBuf) return res.status(400).json({ error: 'Missing webhook signature or payload.' });
+    const parts = Object.fromEntries(sigHeader.split(',').map((kv) => kv.split('=')));
+    const signedPayload = `${parts.t}.${rawBuf.toString('utf8')}`;
+    const expected = crypto.createHmac('sha256', webhookSecret).update(signedPayload).digest('hex');
+    const sigBuf = Buffer.from(String(parts.v1 || ''), 'hex');
+    const expBuf = Buffer.from(expected, 'hex');
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      return res.status(400).json({ error: 'Invalid Stripe webhook signature.' });
+    }
+  } else if (IS_PROD) {
+    return res.status(503).json({ error: 'STRIPE_WEBHOOK_SECRET missing in production.' });
+  }
+  const event = req.body || {};
+  if (event.type === 'checkout.session.completed') {
+    const sessionObj = event.data?.object || {};
+    const orderId = sessionObj.metadata?.order_id;
+    if (orderId) {
+      const store = readStore();
+      finalizePaidOrder(store, orderId, sessionObj);
+      writeStore(store);
+    }
+  }
+  return res.json({ received: true });
 });
 
 // 8. Static Assets & SPA Fallback
