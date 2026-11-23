@@ -115,6 +115,8 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use('/api/webhooks/stripe', express.raw({ type: '*/*', limit: '64kb' }));
+
 app.use(
   express.json({
     limit: '64kb',
@@ -860,32 +862,62 @@ app.get('/api/checkout/verify', async (req, res) => {
 });
 
 app.post('/api/webhooks/stripe', (req, res) => {
-  const sigHeader = String(req.headers['stripe-signature'] || '');
-  const webhookSecret = isRealCred(process.env.STRIPE_WEBHOOK_SECRET) ? process.env.STRIPE_WEBHOOK_SECRET.trim() : '';
-  const rawBuf = req.rawBody;
-  if (webhookSecret) {
-    if (!sigHeader || !rawBuf) return res.status(400).json({ error: 'Missing webhook signature or payload.' });
-    const parts = Object.fromEntries(sigHeader.split(',').map((kv) => kv.split('=')));
-    const signedPayload = `${parts.t}.${rawBuf.toString('utf8')}`;
-    const expected = crypto.createHmac('sha256', webhookSecret).update(signedPayload).digest('hex');
-    const sigBuf = Buffer.from(String(parts.v1 || ''), 'hex');
-    const expBuf = Buffer.from(expected, 'hex');
-    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
-      return res.status(400).json({ error: 'Invalid Stripe webhook signature.' });
-    }
-  } else if (IS_PROD) {
-    return res.status(503).json({ error: 'STRIPE_WEBHOOK_SECRET missing in production.' });
+  const webhookSecret = isRealCred(process.env.STRIPE_WEBHOOK_SECRET)
+    ? process.env.STRIPE_WEBHOOK_SECRET.trim()
+    : '';
+  if (!webhookSecret || /placeholder|replace_me|example/i.test(webhookSecret)) {
+    return res.status(401).json({ error: 'STRIPE_WEBHOOK_SECRET not configured; unverified webhook rejected.' });
   }
-  const event = req.body || {};
+  const sigHeader = String(req.headers['stripe-signature'] || '').trim();
+  const rawBuf = Buffer.isBuffer(req.body) ? req.body : req.rawBody;
+  if (!sigHeader || !Buffer.isBuffer(rawBuf) || !rawBuf.length) {
+    return res.status(400).json({ error: 'Missing raw webhook payload or Stripe-Signature header.' });
+  }
+  let timestamp = 0;
+  const v1Sigs = [];
+  for (const kv of sigHeader.split(',')) {
+    const idx = kv.indexOf('=');
+    if (idx === -1) continue;
+    const k = kv.slice(0, idx).trim();
+    const v = kv.slice(idx + 1).trim();
+    if (k === 't') timestamp = Number(v);
+    if (k === 'v1' && v) v1Sigs.push(v);
+  }
+  const ageSec = Math.abs(Math.floor(Date.now() / 1000) - timestamp);
+  if (!Number.isFinite(timestamp) || timestamp <= 0 || ageSec > 300 || v1Sigs.length === 0) {
+    return res.status(400).json({ error: 'Invalid or expired Stripe webhook timestamp/signature.' });
+  }
+  const signedPayload = `${timestamp}.${rawBuf.toString('utf8')}`;
+  const expBuf = Buffer.from(crypto.createHmac('sha256', webhookSecret).update(signedPayload, 'utf8').digest('hex'), 'utf8');
+  const sigValid = v1Sigs.some((sig) => {
+    const sigBuf = Buffer.from(sig, 'utf8');
+    return sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
+  });
+  if (!sigValid) {
+    return res.status(400).json({ error: 'Invalid or tampered Stripe webhook signature.' });
+  }
+  let event;
+  try {
+    event = JSON.parse(rawBuf.toString('utf8'));
+  } catch {
+    return res.status(400).json({ error: 'Malformed webhook JSON payload.' });
+  }
+  const store = readStore();
+  store.processed_webhooks = store.processed_webhooks || {};
+  if (event.id && store.processed_webhooks[event.id]) {
+    return res.json({ received: true, duplicate: true });
+  }
   if (event.type === 'checkout.session.completed') {
     const sessionObj = event.data?.object || {};
     const orderId = sessionObj.metadata?.order_id;
     if (orderId) {
-      const store = readStore();
       finalizePaidOrder(store, orderId, sessionObj);
-      writeStore(store);
     }
   }
+  if (event.id) {
+    store.processed_webhooks[event.id] = new Date().toISOString();
+  }
+  writeStore(store);
   return res.json({ received: true });
 });
 
