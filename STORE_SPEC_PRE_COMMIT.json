@@ -1,0 +1,49 @@
+{
+  "store_id": "sensory_haven_us",
+  "building_id": "bld_sensory_haven_us",
+  "rollout_order": 5,
+  "recommendation_ref": "Recommendation #5 (US Tactile Sensory, Taba Squishy & Silent Desk Fidgets)",
+  "market": "US (USD • Nationwide USPS / UPS)",
+  "currency": "USD",
+  "commit_status": "LIVE_LOCAL_STOREFRONT_READY",
+  "selected_configuration": {
+    "brand_option_id": "opt_5_kinetic_calm",
+    "theme_option_id": "theme_5_tactile_cloud",
+    "vault_max_cap_pct": 30,
+    "referral_credit_per_friend_pct": 5,
+    "settlement_hold_days_after_delivery": 7,
+    "concept_variant": "KINETIC CALM US (:3007) — FDA General Wellness & CPSIA Verified Tactile Boutique",
+    "founder_notes": "Live on http://localhost:3007 — Interactive Feel Lab, 12 SKUs, 20%+ net margin floor, 30% Calm Vault cap.",
+    "locked_by_founder": true,
+    "live_local_url": "http://localhost:3007"
+  },
+  "live_metrics": {
+    "realized_revenue": 0.0,
+    "live_orders": 0,
+    "active_customers": 0,
+    "vault_discounts_redeemed": 0,
+    "status_label": "LIVE LOCAL STOREFRONT ON :3007 ($0.00 Realized — Zero Fake Data Enforced)"
+  },
+  "forecast_benchmarks": {
+    "record_type": "FORECAST / BENCHMARK TEMPLATE",
+    "aov_target": 52.0,
+    "track_a_gross_margin_pct": "62% – 66%",
+    "safe_vault_cap_range_pct": "25% – 30%",
+    "day1_post_ad_contribution_per_order": "+$9.40 / order",
+    "automation_score_pct": 88.5,
+    "quality_reliability_pct": 94.0,
+    "organic_month6_net": "$3,800 – $8,500 / mo",
+    "paid_ads_month6_net": "$12,000 – $28,000 / mo",
+    "compliance_notes": "US FDA General Wellness non-medical copy ONLY (never claim to treat/cure ADHD or Autism); CPSIA lead/phthalate-free + ASTM F963 choking hazard (<3yr) + CPSC Ages 14+ high-strength magnet warning."
+  },
+  "candidate_distributors": [
+    {
+      "id": "DIST-US-TACTILE-PLATINUM",
+      "name": "US Platinum Silicone & Sensory Packaging Suppliers",
+      "region": "CA / OR / TX (USA)",
+      "sla": "2-4 business days",
+      "status": "READY_FOR_ADMIN_APPROVAL"
+    }
+  ],
+  "updated_at": "2026-11-23T17:08:44.662573+00:00"
+}

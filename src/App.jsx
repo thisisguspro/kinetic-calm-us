@@ -355,12 +355,13 @@ export default function App() {
   const heroItems = useMemo(() => {
     if (!catalog.length) return [];
     const wanted = [
-      'SH-MUSICAL-FRUIT-TRIO',
-      'SH-TABA-CAT-PAW',
-      'SH-GYRO-RING-SPINNER',
-      'SH-4KEY-CREAMY-CLICKER',
+      'SH-REAL-01',
+      'SH-REAL-04',
+      'SH-REAL-08',
+      'SH-REAL-10',
     ];
-    return wanted.map((id) => catalog.find((c) => c.id === id)).filter(Boolean);
+    const picked = wanted.map((id) => catalog.find((c) => c.id === id)).filter(Boolean);
+    return picked.length ? picked : catalog.slice(0, 4);
   }, [catalog]);
 
   const activeHero = heroItems[heroIdx % Math.max(1, heroItems.length)] || catalog[0] || null;
@@ -441,7 +442,7 @@ export default function App() {
             alt={item.name}
             loading="lazy"
             className="product-img-zoom"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#ffffff', padding: '6px', display: 'block' }}
           />
           <span
             className="font-neo"
@@ -485,12 +486,12 @@ export default function App() {
                 {item.is_on_promotion && item.sale_price_usd ? (
                   <>
                     <span style={{ textDecoration: 'line-through', opacity: 0.55, marginRight: '0.28rem', fontSize: '0.84em' }}>
-                      ${Number(item.price_usd).toFixed(0)}
+                      ${Number(item.price_usd).toFixed(2)}
                     </span>
-                    ${Number(item.sale_price_usd).toFixed(0)}
+                    ${Number(item.sale_price_usd).toFixed(2)}
                   </>
                 ) : (
-                  `$${Number(item.price_usd).toFixed(0)}`
+                  `$${Number(item.price_usd).toFixed(2)}`
                 )}
               </span>
             </div>
@@ -898,7 +899,8 @@ export default function App() {
                                   width: '32px',
                                   height: '32px',
                                   borderRadius: '0.5rem',
-                                  objectFit: 'cover',
+                                  objectFit: 'contain',
+                                  backgroundColor: '#ffffff',
                                   border: '1.5px solid #141417',
                                 }}
                               />
@@ -946,7 +948,9 @@ export default function App() {
                         style={{
                           width: '100%',
                           height: '100%',
-                          objectFit: 'cover',
+                          objectFit: 'contain',
+                          backgroundColor: '#ffffff',
+                          padding: '6px',
                           display: 'block',
                         }}
                       />
@@ -966,7 +970,7 @@ export default function App() {
                           fontSize: '0.95rem',
                         }}
                       >
-                        ${Number(activeHero.price_usd).toFixed(0)}
+                        ${Number(activeHero.price_usd).toFixed(2)}
                       </span>
                     </div>
 
@@ -1065,7 +1069,7 @@ export default function App() {
                           }}
                         >
                           {filledItem ? (
-                            <img src={filledItem.image_url} alt={filledItem.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img src={filledItem.image_url} alt={filledItem.name} style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#ffffff', padding: '2px' }} />
                           ) : (
                             <span className="font-neo" style={{ opacity: 0.55 }}>0{slotIdx + 1}</span>
                           )}
@@ -1232,7 +1236,8 @@ export default function App() {
                       width: '32px',
                       height: '32px',
                       borderRadius: '50%',
-                      objectFit: 'cover',
+                      objectFit: 'contain',
+                      backgroundColor: '#ffffff',
                       border: '2px solid #141417',
                       marginLeft: i === 0 ? 0 : '-8px',
                     }}
@@ -1349,8 +1354,8 @@ export default function App() {
             </button>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.65rem', alignItems: 'start' }}>
-              <div style={{ borderRadius: '1.15rem', border: '2px solid var(--border)', overflow: 'hidden', backgroundColor: 'var(--surface-muted)', aspectRatio: '1 / 1' }}>
-                <img src={selectedProduct.image_url} alt={selectedProduct.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              <div style={{ borderRadius: '1.15rem', border: '2px solid var(--border)', overflow: 'hidden', backgroundColor: '#ffffff', padding: '8px', aspectRatio: '1 / 1' }}>
+                <img src={selectedProduct.image_url} alt={selectedProduct.name} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
@@ -1380,14 +1385,27 @@ export default function App() {
                   {selectedProduct.full_story || selectedProduct.short_tagline}
                 </p>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <GroceryQtyStepper
-                    item={selectedProduct}
-                    bag={bag}
-                    onAdd={addToBag}
-                    onUpdateQty={updateBagQty}
-                    size="lg"
-                  />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  {selectedProduct.track === 'TRACK_B_PARTNER' && selectedProduct.partner_url ? (
+                    <a
+                      href={selectedProduct.partner_url}
+                      target="_blank"
+                      rel="noopener noreferrer sponsored"
+                      className="btn-primary"
+                      style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                    >
+                      <span>Shop Official Store ({selectedProduct.partner_name || selectedProduct.brand})</span>
+                      <ExternalLink size={15} />
+                    </a>
+                  ) : (
+                    <GroceryQtyStepper
+                      item={selectedProduct}
+                      bag={bag}
+                      onAdd={addToBag}
+                      onUpdateQty={updateBagQty}
+                      size="lg"
+                    />
+                  )}
                 </div>
 
                 <div style={{ paddingTop: '0.65rem', borderTop: '1.5px dashed var(--border-subtle)', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
@@ -1460,7 +1478,7 @@ export default function App() {
                         backgroundColor: 'var(--surface-muted)',
                       }}
                     >
-                      <img src={item.image_url} alt={item.name} style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '0.55rem', border: '1.5px solid #141417' }} />
+                      <img src={item.image_url} alt={item.name} style={{ width: '52px', height: '52px', objectFit: 'contain', backgroundColor: '#ffffff', padding: '2px', borderRadius: '0.55rem', border: '1.5px solid #141417' }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>{item.name}</div>
                         <div className="tabular-nums font-neo" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>

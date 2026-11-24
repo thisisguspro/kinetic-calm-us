@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
-  <rect width="240" height="240" rx="32" fill="#f4efe8"/>
-  <ellipse cx="120" cy="188" rx="76" ry="12" fill="rgba(24,34,38,0.12)"/>
-  <rect x="46" y="76" width="148" height="98" rx="44" fill="#d7cbbd" stroke="#b5a491" stroke-width="3"/>
-  <line x1="94" y1="80" x2="94" y2="170" stroke="#b5a491" stroke-width="2" stroke-dasharray="5 4"/>
-  <line x1="146" y1="80" x2="146" y2="170" stroke="#b5a491" stroke-width="2" stroke-dasharray="5 4"/>
-</svg>
