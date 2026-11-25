@@ -319,9 +319,13 @@ export default function App() {
         next[idx] = { ...next[idx], quantity: Math.min(20, next[idx].quantity + 1) };
         return next;
       }
+      const effectivePrice =
+        item.is_on_promotion && Number(item.sale_price_usd) > 0
+          ? Number(item.sale_price_usd)
+          : Number(item.price_usd || 0);
       return [
         ...prev,
-        { id: item.id, name: item.name, price_usd: item.price_usd, image_url: item.image_url, quantity: 1 },
+        { id: item.id, name: item.name, price_usd: effectivePrice, image_url: item.image_url, quantity: 1 },
       ];
     });
     setCheckoutStatus('');
@@ -429,7 +433,7 @@ export default function App() {
       >
         <div
           style={{
-            backgroundColor: 'var(--surface-muted)',
+            background: 'radial-gradient(circle at 50% 42%, rgba(255, 250, 244, 0.92) 0%, rgba(235, 229, 246, 0.85) 64%, rgba(212, 203, 232, 0.94) 100%)',
             borderRadius: '1.05rem',
             border: '2px solid var(--border)',
             aspectRatio: featuredWide ? '16 / 12' : '1 / 1',
@@ -437,12 +441,36 @@ export default function App() {
             overflow: 'hidden',
           }}
         >
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: '12%',
+              right: '12%',
+              bottom: '8%',
+              height: '18px',
+              borderRadius: '50%',
+              background: 'radial-gradient(ellipse at center, rgba(20, 20, 23, 0.28) 0%, transparent 72%)',
+              pointerEvents: 'none',
+            }}
+          />
           <img
-            src={item.image_url}
+            src={item.pedestal_transparent_url || item.image_url}
             alt={item.name}
             loading="lazy"
             className="product-img-zoom"
-            style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#ffffff', padding: '6px', display: 'block' }}
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              objectPosition: 'bottom center',
+              backgroundColor: 'transparent',
+              padding: '12px 12px 12%',
+              filter: 'drop-shadow(0 14px 16px rgba(20, 20, 30, 0.26))',
+              display: 'block',
+            }}
           />
           <span
             className="font-neo"
@@ -893,14 +921,14 @@ export default function App() {
                               }}
                             >
                               <img
-                                src={hi.image_url}
+                                src={hi.pedestal_transparent_url || hi.image_url}
                                 alt=""
                                 style={{
                                   width: '32px',
                                   height: '32px',
                                   borderRadius: '0.5rem',
                                   objectFit: 'contain',
-                                  backgroundColor: '#ffffff',
+                                  background: 'radial-gradient(circle, #f8f5ff 0%, #e4dcf5 100%)',
                                   border: '1.5px solid #141417',
                                 }}
                               />
@@ -937,20 +965,37 @@ export default function App() {
                         border: '2px solid #141417',
                         overflow: 'hidden',
                         aspectRatio: '16 / 12',
-                        backgroundColor: '#FFFFFF',
+                        background: 'radial-gradient(circle at 50% 42%, rgba(255, 250, 244, 0.94) 0%, rgba(235, 229, 246, 0.88) 62%, rgba(212, 203, 232, 0.96) 100%)',
                         position: 'relative',
                       }}
                     >
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          position: 'absolute',
+                          left: '16%',
+                          right: '16%',
+                          bottom: '8%',
+                          height: '22px',
+                          borderRadius: '50%',
+                          background: 'radial-gradient(ellipse at center, rgba(20, 20, 23, 0.30) 0%, transparent 72%)',
+                          pointerEvents: 'none',
+                        }}
+                      />
                       <img
                         key={activeHero.id}
-                        src={activeHero.image_url}
+                        src={activeHero.pedestal_transparent_url || activeHero.image_url}
                         alt={activeHero.name}
                         style={{
+                          position: 'relative',
+                          zIndex: 1,
                           width: '100%',
                           height: '100%',
                           objectFit: 'contain',
-                          backgroundColor: '#ffffff',
-                          padding: '6px',
+                          objectPosition: 'bottom center',
+                          backgroundColor: 'transparent',
+                          padding: '16px 16px 12%',
+                          filter: 'drop-shadow(0 16px 18px rgba(20, 20, 30, 0.28))',
                           display: 'block',
                         }}
                       />
@@ -960,9 +1005,10 @@ export default function App() {
                           position: 'absolute',
                           bottom: '0.75rem',
                           right: '0.75rem',
+                          zIndex: 2,
                           padding: '0.32rem 0.78rem',
                           borderRadius: '999px',
-                          backgroundColor: '#FFFFFF',
+                          backgroundColor: '#FFF7E8',
                           color: '#141417',
                           border: '2px solid #141417',
                           boxShadow: '3px 3px 0px #141417',
@@ -970,7 +1016,16 @@ export default function App() {
                           fontSize: '0.95rem',
                         }}
                       >
-                        ${Number(activeHero.price_usd).toFixed(2)}
+                        {activeHero.is_on_promotion && activeHero.sale_price_usd ? (
+                          <>
+                            <span style={{ textDecoration: 'line-through', opacity: 0.55, marginRight: '0.35rem', fontSize: '0.84em' }}>
+                              ${Number(activeHero.price_usd).toFixed(2)}
+                            </span>
+                            ${Number(activeHero.sale_price_usd).toFixed(2)}
+                          </>
+                        ) : (
+                          `$${Number(activeHero.price_usd).toFixed(2)}`
+                        )}
                       </span>
                     </div>
 
@@ -1069,7 +1124,7 @@ export default function App() {
                           }}
                         >
                           {filledItem ? (
-                            <img src={filledItem.image_url} alt={filledItem.name} style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#ffffff', padding: '2px' }} />
+                            <img src={filledItem.pedestal_transparent_url || filledItem.image_url} alt={filledItem.name} style={{ width: '100%', height: '100%', objectFit: 'contain', background: 'radial-gradient(circle, #f8f5ff 0%, #e4dcf5 100%)', padding: '2px' }} />
                           ) : (
                             <span className="font-neo" style={{ opacity: 0.55 }}>0{slotIdx + 1}</span>
                           )}
@@ -1354,8 +1409,8 @@ export default function App() {
             </button>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.65rem', alignItems: 'start' }}>
-              <div style={{ borderRadius: '1.15rem', border: '2px solid var(--border)', overflow: 'hidden', backgroundColor: '#ffffff', padding: '8px', aspectRatio: '1 / 1' }}>
-                <img src={selectedProduct.image_url} alt={selectedProduct.name} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+              <div style={{ borderRadius: '1.15rem', border: '2px solid var(--border)', overflow: 'hidden', background: 'radial-gradient(circle at 50% 42%, rgba(255, 250, 244, 0.94) 0%, rgba(235, 229, 246, 0.88) 62%, rgba(212, 203, 232, 0.96) 100%)', padding: '14px', aspectRatio: '1 / 1', position: 'relative' }}>
+                <img src={selectedProduct.pedestal_transparent_url || selectedProduct.image_url} alt={selectedProduct.name} style={{ width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'bottom center', filter: 'drop-shadow(0 14px 16px rgba(20, 20, 30, 0.28))', display: 'block' }} />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
@@ -1367,7 +1422,16 @@ export default function App() {
                     {selectedProduct.name}
                   </h2>
                   <div className="tabular-nums font-neo" style={{ fontSize: '1.4rem', fontWeight: 800 }}>
-                    ${Number(selectedProduct.price_usd).toFixed(2)}
+                    {selectedProduct.is_on_promotion && selectedProduct.sale_price_usd ? (
+                      <>
+                        <span style={{ textDecoration: 'line-through', opacity: 0.55, marginRight: '0.45rem', fontSize: '0.82em' }}>
+                          ${Number(selectedProduct.price_usd).toFixed(2)}
+                        </span>
+                        ${Number(selectedProduct.sale_price_usd).toFixed(2)}
+                      </>
+                    ) : (
+                      `$${Number(selectedProduct.price_usd).toFixed(2)}`
+                    )}
                   </div>
                 </div>
 
@@ -1478,7 +1542,7 @@ export default function App() {
                         backgroundColor: 'var(--surface-muted)',
                       }}
                     >
-                      <img src={item.image_url} alt={item.name} style={{ width: '52px', height: '52px', objectFit: 'contain', backgroundColor: '#ffffff', padding: '2px', borderRadius: '0.55rem', border: '1.5px solid #141417' }} />
+                      <img src={item.pedestal_transparent_url || item.image_url} alt={item.name} style={{ width: '52px', height: '52px', objectFit: 'contain', background: 'radial-gradient(circle, #f8f5ff 0%, #e4dcf5 100%)', padding: '2px', borderRadius: '0.55rem', border: '1.5px solid #141417' }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>{item.name}</div>
                         <div className="tabular-nums font-neo" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>

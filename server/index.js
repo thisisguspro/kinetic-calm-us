@@ -26,8 +26,16 @@ import {
   writeStore,
 } from './adminStore.js';
 
+import { createLivePriceSync } from '../shared/livePriceSync.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..');
+const livePriceSync = createLivePriceSync({
+  catalogPath: path.join(ROOT_DIR, 'shared', 'catalog.json'),
+  currency: 'USD',
+  isSensoryHaven: true,
+  logTag: 'Kinetic Calm',
+});
 const ENV_FILE = path.join(ROOT_DIR, '.env');
 if (fs.existsSync(ENV_FILE)) {
   for (const line of fs.readFileSync(ENV_FILE, 'utf8').split(/\r?\n/)) {
@@ -586,7 +594,7 @@ app.get('/sitemap.xml', (req, res) => {
 
 app.get('/api/catalog', (_req, res) => {
   const store = readStore();
-  const catalog = loadCatalog().map(({ cost_usd: _hiddenCost, ...publicSku }) => ({
+  const catalog = livePriceSync.applyLivePriceOverrides(loadCatalog()).map(({ cost_usd: _hiddenCost, ...publicSku }) => ({
     ...publicSku,
     compliance_verified: Boolean(publicSku.cpsia_astm_note && publicSku.fda_wellness_note),
   }));
@@ -599,6 +607,10 @@ app.get('/api/catalog', (_req, res) => {
     bundle_config: store.bundle_config,
     items: catalog,
   });
+});
+
+app.get('/api/catalog/price-sync-status', (_req, res) => {
+  res.json(livePriceSync.getPriceSyncStatus());
 });
 
 app.get('/api/referral-verify', (req, res) => {
@@ -939,4 +951,5 @@ app.get('*', (_req, res) => {
 
 app.listen(PORT, BIND_HOST, () => {
   console.log(`KINETIC CALM US storefront listening on http://${BIND_HOST}:${PORT}`);
+  livePriceSync.start();
 });
