@@ -154,6 +154,14 @@ function replaceTextPrice(text, sym, val) {
   return String(text).replace(/\$[0-9]+(?:,[0-9]{3})*(?:\.[0-9]{2})?/g, `$${val.toFixed(2)}`);
 }
 
+function isAmazonPaApiConfigured() {
+  return Boolean(
+    String(process.env.AMAZON_PAAPI_ACCESS_KEY || '').trim() &&
+      String(process.env.AMAZON_PAAPI_SECRET_KEY || '').trim() &&
+      String(process.env.AMAZON_ASSOC_TAG || '').trim()
+  );
+}
+
 export function createLivePriceSync({
   catalogPath,
   currency = 'BRL',
@@ -162,12 +170,110 @@ export function createLivePriceSync({
   intervalMs = 60 * 60 * 1000,
 } = {}) {
   const liveOverrides = new Map();
+  const skuSyncedAt = new Map();
   const state = {
     last_synced_at: null,
     updated_count: 0,
     total_skus: 0,
     syncing: false,
   };
+
+  function computePatchForItem(it, live, today) {
+    const patch = {};
+    let changed = false;
+    const oldCur =
+      currency === 'BRL'
+        ? Number(it.sale_price_brl || it.price_brl || it.base_price_brl || 0)
+        : Number(it.sale_price_usd || it.price_usd || it.base_price_usd || 0);
+
+    if (currency === 'BRL') {
+      const cmpOut = live.listPrice > live.currentPrice + 0.01 ? live.listPrice : null;
+      const pixOut = live.pixPrice > 0 && live.pixPrice < live.currentPrice - 0.01 ? live.pixPrice : live.currentPrice;
+      patch.price_brl = live.currentPrice;
+      patch.base_price_brl = live.currentPrice;
+      patch.compare_at_brl = cmpOut;
+      patch.sale_price_brl = cmpOut ? live.currentPrice : null;
+      patch.pix_price_brl = pixOut;
+      patch.on_sale = Boolean(cmpOut || pixOut < live.currentPrice - 0.01);
+      patch.price_verified_at = today;
+      patch.in_stock_at_supplier = live.inStock;
+      if (it.fixation_hours) {
+        patch.fixation_hours = `Verificado R$ ${live.currentPrice.toFixed(2)}`;
+      }
+      if (it.tagline_pt) {
+        patch.tagline_pt = replaceTextPrice(it.tagline_pt, 'R$', live.currentPrice);
+      }
+      changed =
+        Math.abs(oldCur - live.currentPrice) > 0.01 ||
+        Math.abs(Number(it.price_brl || 0) - live.currentPrice) > 0.01 ||
+        Math.abs(Number(it.pix_price_brl || oldCur) - pixOut) > 0.01 ||
+        Math.abs(Number(it.compare_at_brl || 0) - Number(cmpOut || 0)) > 0.01 ||
+        (patch.fixation_hours && patch.fixation_hours !== it.fixation_hours) ||
+        (patch.tagline_pt && patch.tagline_pt !== it.tagline_pt);
+    } else if (isSensoryHaven) {
+      const cmpOut = live.listPrice > live.currentPrice + 0.01 ? live.listPrice : null;
+      patch.price_usd = cmpOut || live.currentPrice;
+      patch.sale_price_usd = cmpOut ? live.currentPrice : null;
+      patch.compare_at_usd = cmpOut;
+      patch.is_on_promotion = Boolean(cmpOut);
+      patch.price_verified_at = today;
+      changed =
+        Math.abs(oldCur - live.currentPrice) > 0.01 ||
+        Math.abs(Number(it.compare_at_usd || 0) - Number(cmpOut || 0)) > 0.01;
+    } else {
+      const cmpOut = live.listPrice > live.currentPrice + 0.01 ? live.listPrice : null;
+      patch.price_usd = live.currentPrice;
+      patch.base_price_usd = live.currentPrice;
+      patch.compare_at_usd = cmpOut;
+      patch.sale_price_usd = cmpOut ? live.currentPrice : null;
+      patch.on_sale = Boolean(cmpOut);
+      patch.price_verified_at = today;
+      if (it.tagline_en) {
+        patch.tagline_en = replaceTextPrice(it.tagline_en, '$', live.currentPrice);
+      }
+      changed =
+        Math.abs(oldCur - live.currentPrice) > 0.01 ||
+        Math.abs(Number(it.compare_at_usd || 0) - Number(cmpOut || 0)) > 0.01;
+    }
+    return { patch, changed };
+  }
+
+  async function syncSingleItem(it, today) {
+    const url = String(it?.verified_source_url || it?.supplier_links?.[0]?.url || it?.partner_url || '').trim();
+    if (!url || !url.startsWith('http')) return null;
+    const host = new URL(url).host.toLowerCase();
+    // Never scrape Amazon HTML; Amazon pricing is gated cleanly behind PA-API 5.0 when configured.
+    if (host.includes('amazon.')) return null;
+    const isVtex = ['epocacosmeticos', 'santalolla', 'vivara', 'swarovski'].some((h) => host.includes(h));
+    const oldCur =
+      currency === 'BRL'
+        ? Number(it.sale_price_brl || it.price_brl || it.base_price_brl || 0)
+        : Number(it.sale_price_usd || it.price_usd || it.base_price_usd || 0);
+    const live = isVtex
+      ? await probeVtexLive(url, it.name || it.title || '')
+      : await probeShopifyLive(url, oldCur);
+    if (!live || live.currentPrice <= 0) return null;
+
+    const { patch, changed } = computePatchForItem(it, live, today);
+    liveOverrides.set(it.id, patch);
+    skuSyncedAt.set(it.id, Date.now());
+    return { patch, changed };
+  }
+
+  function persistCatalogSafe(items) {
+    try {
+      const tmp = `${catalogPath}.tmp.${process.pid}`;
+      fs.writeFileSync(tmp, `${JSON.stringify(items, null, 2)}\n`, 'utf8');
+      try {
+        fs.renameSync(tmp, catalogPath);
+      } catch {
+        fs.writeFileSync(catalogPath, `${JSON.stringify(items, null, 2)}\n`, 'utf8');
+        if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+      }
+    } catch {
+      // Read-only deployment FS safe fallback: in-memory liveOverrides remain active
+    }
+  }
 
   async function runSyncOnce() {
     if (state.syncing || !catalogPath || !fs.existsSync(catalogPath)) return state;
@@ -183,82 +289,11 @@ export function createLivePriceSync({
         while (cursor < items.length) {
           const idx = cursor++;
           const it = items[idx];
-          const url = String(it?.verified_source_url || it?.supplier_links?.[0]?.url || it?.partner_url || '').trim();
-          if (!url || !url.startsWith('http')) continue;
           try {
-            const host = new URL(url).host.toLowerCase();
-            const isVtex = ['epocacosmeticos', 'santalolla', 'vivara', 'swarovski'].some((h) => host.includes(h));
-            const oldCur =
-              currency === 'BRL'
-                ? Number(it.sale_price_brl || it.price_brl || it.base_price_brl || 0)
-                : Number(it.sale_price_usd || it.price_usd || it.base_price_usd || 0);
-            const live = isVtex
-              ? await probeVtexLive(url, it.name || it.title || '')
-              : await probeShopifyLive(url, oldCur);
-            if (!live || live.currentPrice <= 0) continue;
-
-            const patch = {};
-            if (currency === 'BRL') {
-              const cmpOut = live.listPrice > live.currentPrice + 0.01 ? live.listPrice : null;
-              const pixOut = live.pixPrice > 0 && live.pixPrice < live.currentPrice - 0.01 ? live.pixPrice : live.currentPrice;
-              patch.price_brl = live.currentPrice;
-              patch.base_price_brl = live.currentPrice;
-              patch.compare_at_brl = cmpOut;
-              patch.sale_price_brl = cmpOut ? live.currentPrice : null;
-              patch.pix_price_brl = pixOut;
-              patch.on_sale = Boolean(cmpOut || pixOut < live.currentPrice - 0.01);
-              patch.price_verified_at = today;
-              patch.in_stock_at_supplier = live.inStock;
-              if (it.fixation_hours) {
-                patch.fixation_hours = `Verificado R$ ${live.currentPrice.toFixed(2)}`;
-              }
-              if (it.tagline_pt) {
-                patch.tagline_pt = replaceTextPrice(it.tagline_pt, 'R$', live.currentPrice);
-              }
-              if (
-                Math.abs(oldCur - live.currentPrice) > 0.01 ||
-                Math.abs(Number(it.price_brl || 0) - live.currentPrice) > 0.01 ||
-                Math.abs(Number(it.pix_price_brl || oldCur) - pixOut) > 0.01 ||
-                Math.abs(Number(it.compare_at_brl || 0) - Number(cmpOut || 0)) > 0.01 ||
-                (patch.fixation_hours && patch.fixation_hours !== it.fixation_hours) ||
-                (patch.tagline_pt && patch.tagline_pt !== it.tagline_pt)
-              ) {
-                changedCount += 1;
-              }
-            } else if (isSensoryHaven) {
-              const cmpOut = live.listPrice > live.currentPrice + 0.01 ? live.listPrice : null;
-              patch.price_usd = cmpOut || live.currentPrice;
-              patch.sale_price_usd = cmpOut ? live.currentPrice : null;
-              patch.compare_at_usd = cmpOut;
-              patch.is_on_promotion = Boolean(cmpOut);
-              patch.price_verified_at = today;
-              if (
-                Math.abs(oldCur - live.currentPrice) > 0.01 ||
-                Math.abs(Number(it.compare_at_usd || 0) - Number(cmpOut || 0)) > 0.01
-              ) {
-                changedCount += 1;
-              }
-            } else {
-              const cmpOut = live.listPrice > live.currentPrice + 0.01 ? live.listPrice : null;
-              patch.price_usd = live.currentPrice;
-              patch.base_price_usd = live.currentPrice;
-              patch.compare_at_usd = cmpOut;
-              patch.sale_price_usd = cmpOut ? live.currentPrice : null;
-              patch.on_sale = Boolean(cmpOut);
-              patch.price_verified_at = today;
-              if (it.tagline_en) {
-                patch.tagline_en = replaceTextPrice(it.tagline_en, '$', live.currentPrice);
-              }
-              if (
-                Math.abs(oldCur - live.currentPrice) > 0.01 ||
-                Math.abs(Number(it.compare_at_usd || 0) - Number(cmpOut || 0)) > 0.01
-              ) {
-                changedCount += 1;
-              }
-            }
-
-            liveOverrides.set(it.id, patch);
-            Object.assign(items[idx], patch);
+            const res = await syncSingleItem(it, today);
+            if (!res) continue;
+            Object.assign(items[idx], res.patch);
+            if (res.changed) changedCount += 1;
           } catch {
             // Skip individual transient error cleanly
           }
@@ -268,18 +303,7 @@ export function createLivePriceSync({
       await Promise.all([worker(), worker(), worker(), worker()]);
 
       if (changedCount > 0) {
-        try {
-          const tmp = `${catalogPath}.tmp.${process.pid}`;
-          fs.writeFileSync(tmp, `${JSON.stringify(items, null, 2)}\n`, 'utf8');
-          try {
-            fs.renameSync(tmp, catalogPath);
-          } catch {
-            fs.writeFileSync(catalogPath, `${JSON.stringify(items, null, 2)}\n`, 'utf8');
-            if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
-          }
-        } catch {
-          // Read-only deployment FS safe fallback: in-memory liveOverrides remain active
-        }
+        persistCatalogSafe(items);
       }
 
       state.last_synced_at = new Date().toISOString();
@@ -291,6 +315,43 @@ export function createLivePriceSync({
       state.syncing = false;
     }
     return state;
+  }
+
+  async function refreshSkuIfStale(itemId, maxAgeMs = 5 * 60 * 1000) {
+    if (!itemId || !catalogPath || !fs.existsSync(catalogPath)) {
+      return { updated: false, cached: false, itemId };
+    }
+    const items = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+    const idx = Array.isArray(items) ? items.findIndex((x) => x.id === itemId || x.sku === itemId) : -1;
+    if (idx < 0) return { updated: false, cached: false, itemId };
+    const canonicalId = items[idx].id;
+    const lastTs = skuSyncedAt.get(canonicalId) || 0;
+    if (Date.now() - lastTs < maxAgeMs) {
+      return {
+        updated: false,
+        cached: true,
+        itemId: canonicalId,
+        syncedAt: new Date(lastTs).toISOString(),
+        patch: liveOverrides.get(canonicalId) || null,
+      };
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const res = await syncSingleItem(items[idx], today);
+      if (res?.changed) {
+        Object.assign(items[idx], res.patch);
+        persistCatalogSafe(items);
+      }
+      return {
+        updated: Boolean(res?.changed),
+        cached: false,
+        itemId: canonicalId,
+        syncedAt: new Date(skuSyncedAt.get(canonicalId) || Date.now()).toISOString(),
+        patch: res?.patch || null,
+      };
+    } catch {
+      return { updated: false, cached: false, itemId: canonicalId };
+    }
   }
 
   function applyLivePriceOverrides(items) {
@@ -313,7 +374,11 @@ export function createLivePriceSync({
   return {
     start,
     runSyncOnce,
+    refreshSkuIfStale,
     applyLivePriceOverrides,
-    getPriceSyncStatus: () => ({ ...state }),
+    getPriceSyncStatus: () => ({
+      ...state,
+      amazon_paapi_configured: isAmazonPaApiConfigured(),
+    }),
   };
 }
