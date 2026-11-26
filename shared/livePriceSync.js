@@ -22,17 +22,7 @@ async function fetchJson(url, headers = {}) {
   }
 }
 
-async function fetchText(url, headers = {}) {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': FETCH_UA, ...headers },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!res.ok) return '';
-  return await res.text();
-}
-
-async function probeVtexLive(sourceUrl) {
+async function probeVtexLive(sourceUrl, itemTitle = '') {
   const parsed = new URL(sourceUrl);
   const parts = parsed.pathname.split('/').filter(Boolean);
   const slug = parts.length >= 2 && parts[parts.length - 1] === 'p' ? parts[parts.length - 2] : parts[0] || '';
@@ -45,30 +35,44 @@ async function probeVtexLive(sourceUrl) {
     const apiUrl = `${parsed.protocol}//${parsed.host}/api/catalog_system/pub/products/search/${slug}/p`;
     const arr = await fetchJson(apiUrl, { 'Accept-Language': 'pt-BR,pt;q=0.9' });
     if (Array.isArray(arr) && arr.length > 0) {
-      let bestOffer = null;
-      for (const item of arr[0].items || []) {
-        for (const seller of item.sellers || []) {
-          const co = seller.commertialOffer || {};
-          const pv = Number(co.Price || 0);
-          const avail = Number(co.AvailableQuantity || 0);
-          if (avail > 0 && pv > 0 && (!bestOffer || pv < bestOffer.price)) {
-            bestOffer = { price: pv, co, avail };
-          }
-        }
+      const allSkus = Array.isArray(arr[0].items) ? arr[0].items : [];
+      const volMatch = String(itemTitle || '').match(/\b(\d+)\s*ml\b/i);
+      let candidateSkus = allSkus;
+      if (allSkus.length > 1 && volMatch) {
+        const volRe = new RegExp(`\\b${volMatch[1]}\\s*ml\\b`, 'i');
+        const matched = allSkus.filter(
+          (sk) => volRe.test(String(sk.name || '')) || volRe.test(String(sk.nameComplete || ''))
+        );
+        if (matched.length > 0) candidateSkus = matched;
       }
-      if (!bestOffer) {
-        for (const item of arr[0].items || []) {
+
+      const pickSellerOffer = (skusList, requireStock) => {
+        const candidates = [];
+        for (const item of skusList) {
           for (const seller of item.sellers || []) {
             const co = seller.commertialOffer || {};
             const pv = Number(co.Price || 0);
-            if (pv > 0) {
-              bestOffer = { price: pv, co, avail: Number(co.AvailableQuantity || 0) };
-              break;
+            const avail = Number(co.AvailableQuantity || 0);
+            if (pv > 0 && (!requireStock || avail > 0)) {
+              candidates.push({
+                price: pv,
+                co,
+                avail,
+                isDefault: seller.sellerDefault === true ? 0 : 1,
+              });
             }
           }
-          if (bestOffer) break;
         }
-      }
+        if (!candidates.length) return null;
+        candidates.sort((a, b) => (a.isDefault !== b.isDefault ? a.isDefault - b.isDefault : a.price - b.price));
+        return candidates[0];
+      };
+
+      const bestOffer =
+        pickSellerOffer(candidateSkus, true) ||
+        pickSellerOffer(candidateSkus, false) ||
+        (candidateSkus !== allSkus ? pickSellerOffer(allSkus, true) || pickSellerOffer(allSkus, false) : null);
+
       if (bestOffer) {
         bestPrice = bestOffer.price;
         inStock = bestOffer.avail > 0;
@@ -88,34 +92,6 @@ async function probeVtexLive(sourceUrl) {
         }
       }
     }
-  }
-
-  try {
-    const html = await fetchText(sourceUrl, { 'Accept-Language': 'pt-BR,pt;q=0.9' });
-    if (html) {
-      const pixMatches = [...html.matchAll(/"pixPrice"\s*:\s*([0-9]+(?:\.[0-9]+)?)/g)]
-        .map((m) => Number(m[1]))
-        .filter((v) => v > 0 && (bestPrice <= 0 || v >= bestPrice * 0.4));
-      if (pixMatches.length) {
-        const minPix = Math.min(...pixMatches);
-        if (pixPrice <= 0 || minPix < pixPrice) pixPrice = minPix;
-      }
-      const pctMatches = [...html.matchAll(/(\d+)%\s*de\s*desconto\s*no\s*pix/gi)]
-        .map((m) => Number(m[1]))
-        .filter((v) => v >= 1 && v <= 40);
-      if (pctMatches.length && bestPrice > 0) {
-        const cand = round2(bestPrice * (1 - Math.max(...pctMatches) / 100));
-        if (pixPrice <= 0 || cand < pixPrice) pixPrice = cand;
-      }
-      if (listPrice <= bestPrice) {
-        const lm = [...html.matchAll(/"listPrice"\s*:\s*([0-9]+(?:\.[0-9]+)?)/g)]
-          .map((m) => Number(m[1]))
-          .filter((v) => v > bestPrice);
-        if (lm.length) listPrice = Math.max(...lm);
-      }
-    }
-  } catch {
-    // Non-fatal HTML enrich
   }
 
   if (bestPrice <= 0) return null;
@@ -174,8 +150,8 @@ async function probeShopifyLive(sourceUrl, prevPrice) {
 
 function replaceTextPrice(text, sym, val) {
   if (!text) return text;
-  if (sym === 'R$') return String(text).replace(/R\$\s*[0-9]+(?:[.,][0-9]{2})?/g, `R$ ${val.toFixed(2)}`);
-  return String(text).replace(/\$[0-9]+(?:\.[0-9]{2})?/g, `$${val.toFixed(2)}`);
+  if (sym === 'R$') return String(text).replace(/R\$\s*[0-9]+(?:[.,][0-9]{3})*(?:[.,][0-9]{2})?/g, `R$ ${val.toFixed(2)}`);
+  return String(text).replace(/\$[0-9]+(?:,[0-9]{3})*(?:\.[0-9]{2})?/g, `$${val.toFixed(2)}`);
 }
 
 export function createLivePriceSync({
@@ -183,7 +159,7 @@ export function createLivePriceSync({
   currency = 'BRL',
   isSensoryHaven = false,
   logTag = 'Store',
-  intervalMs = 6 * 60 * 60 * 1000,
+  intervalMs = 60 * 60 * 1000,
 } = {}) {
   const liveOverrides = new Map();
   const state = {
@@ -216,7 +192,9 @@ export function createLivePriceSync({
               currency === 'BRL'
                 ? Number(it.sale_price_brl || it.price_brl || it.base_price_brl || 0)
                 : Number(it.sale_price_usd || it.price_usd || it.base_price_usd || 0);
-            const live = isVtex ? await probeVtexLive(url) : await probeShopifyLive(url, oldCur);
+            const live = isVtex
+              ? await probeVtexLive(url, it.name || it.title || '')
+              : await probeShopifyLive(url, oldCur);
             if (!live || live.currentPrice <= 0) continue;
 
             const patch = {};
@@ -232,15 +210,18 @@ export function createLivePriceSync({
               patch.price_verified_at = today;
               patch.in_stock_at_supplier = live.inStock;
               if (it.fixation_hours) {
-                patch.fixation_hours = `Verificado R$ ${(pixOut < live.currentPrice ? pixOut : live.currentPrice).toFixed(2)}`;
+                patch.fixation_hours = `Verificado R$ ${live.currentPrice.toFixed(2)}`;
               }
               if (it.tagline_pt) {
                 patch.tagline_pt = replaceTextPrice(it.tagline_pt, 'R$', live.currentPrice);
               }
               if (
                 Math.abs(oldCur - live.currentPrice) > 0.01 ||
+                Math.abs(Number(it.price_brl || 0) - live.currentPrice) > 0.01 ||
                 Math.abs(Number(it.pix_price_brl || oldCur) - pixOut) > 0.01 ||
-                Math.abs(Number(it.compare_at_brl || 0) - Number(cmpOut || 0)) > 0.01
+                Math.abs(Number(it.compare_at_brl || 0) - Number(cmpOut || 0)) > 0.01 ||
+                (patch.fixation_hours && patch.fixation_hours !== it.fixation_hours) ||
+                (patch.tagline_pt && patch.tagline_pt !== it.tagline_pt)
               ) {
                 changedCount += 1;
               }
@@ -323,7 +304,7 @@ export function createLivePriceSync({
   function start() {
     setTimeout(() => {
       void runSyncOnce();
-    }, 15000).unref?.();
+    }, 3000).unref?.();
     setInterval(() => {
       void runSyncOnce();
     }, intervalMs).unref?.();
