@@ -260,15 +260,15 @@ export function computeSkuMargins(item) {
   const stripeFull = effectiveRetail * STRIPE_FEE_PCT + STRIPE_FIXED_USD;
   const fullMargin = ((effectiveRetail - cost - stripeFull) / effectiveRetail) * 100;
 
-  const discountedPrice = item.is_on_promotion
-    ? effectiveRetail
-    : effectiveRetail * (1 - MAX_LOYALTY_DISCOUNT_PCT / 100);
+  const appliedMaxDisc =
+    item.vault_discount_eligible && !item.is_on_promotion ? MAX_LOYALTY_DISCOUNT_PCT : 0;
+  const discountedPrice = effectiveRetail * (1 - appliedMaxDisc / 100);
   const stripeDisc = discountedPrice * STRIPE_FEE_PCT + STRIPE_FIXED_USD;
   const discMargin = ((discountedPrice - cost - stripeDisc) / discountedPrice) * 100;
 
   return {
     full_price_margin_pct: Number(fullMargin.toFixed(2)),
-    max_vault_discount_pct: item.vault_discount_eligible && !item.is_on_promotion ? MAX_LOYALTY_DISCOUNT_PCT : 0,
+    max_vault_discount_pct: appliedMaxDisc,
     discounted_30_margin_pct: Number(discMargin.toFixed(2)),
     passes_20pct_floor: fullMargin >= MIN_NET_MARGIN_PCT && discMargin >= MIN_NET_MARGIN_PCT,
   };

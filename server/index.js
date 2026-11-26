@@ -594,10 +594,17 @@ app.get('/sitemap.xml', (req, res) => {
 
 app.get('/api/catalog', (_req, res) => {
   const store = readStore();
-  const catalog = livePriceSync.applyLivePriceOverrides(loadCatalog()).map(({ cost_usd: _hiddenCost, ...publicSku }) => ({
-    ...publicSku,
-    compliance_verified: Boolean(publicSku.cpsia_astm_note && publicSku.fda_wellness_note),
-  }));
+  const catalog = livePriceSync
+    .applyLivePriceOverrides(loadCatalog())
+    .map(({ cost_usd: _hiddenCost, verified_source_url: _vsu, verified_image_source: _vis, ...publicSku }) => {
+      const isDirect = publicSku.track === 'TRACK_A_DIRECT';
+      return {
+        ...publicSku,
+        partner_url: isDirect ? null : publicSku.partner_url || null,
+        partner_name: isDirect ? null : publicSku.partner_name || null,
+        compliance_verified: Boolean(publicSku.cpsia_astm_note && publicSku.fda_wellness_note),
+      };
+    });
   res.json({
     brand: 'KINETIC CALM',
     currency: 'USD',

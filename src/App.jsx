@@ -433,27 +433,14 @@ export default function App() {
       >
         <div
           style={{
-            background: 'radial-gradient(circle at 50% 42%, rgba(255, 250, 244, 0.92) 0%, rgba(235, 229, 246, 0.85) 64%, rgba(212, 203, 232, 0.94) 100%)',
+            background: '#efe8de',
             borderRadius: '1.05rem',
             border: '2px solid var(--border)',
-            aspectRatio: featuredWide ? '16 / 12' : '1 / 1',
+            aspectRatio: '1 / 1',
             position: 'relative',
             overflow: 'hidden',
           }}
         >
-          <div
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              left: '12%',
-              right: '12%',
-              bottom: '8%',
-              height: '18px',
-              borderRadius: '50%',
-              background: 'radial-gradient(ellipse at center, rgba(20, 20, 23, 0.28) 0%, transparent 72%)',
-              pointerEvents: 'none',
-            }}
-          />
           <img
             src={item.pedestal_transparent_url || item.image_url}
             alt={item.name}
@@ -464,11 +451,11 @@ export default function App() {
               zIndex: 1,
               width: '100%',
               height: '100%',
-              objectFit: 'contain',
-              objectPosition: 'bottom center',
+              objectFit: 'cover',
+              objectPosition: 'center bottom',
               backgroundColor: 'transparent',
-              padding: '12px 12px 12%',
-              filter: 'drop-shadow(0 14px 16px rgba(20, 20, 30, 0.26))',
+              padding: 0,
+              filter: 'none',
               display: 'block',
             }}
           />
@@ -559,29 +546,7 @@ export default function App() {
             }}
           >
             <SensoryStatCluster item={item} emotePack={emotePack} compact={!featuredWide} />
-            {item.track === 'TRACK_B_PARTNER' ? (
-              <a
-                href={item.partner_url || '#'}
-                target="_blank"
-                rel="noopener noreferrer sponsored"
-                onClick={(e) => e.stopPropagation()}
-                className="btn-ghost"
-                style={{
-                  textDecoration: 'none',
-                  padding: '0.44rem 0.85rem',
-                  borderRadius: '999px',
-                  fontSize: '0.78rem',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.32rem',
-                }}
-              >
-                <span>Shop Partner</span>
-                <ExternalLink size={13} />
-              </a>
-            ) : (
-              <GroceryQtyStepper item={item} bag={bag} onAdd={addToBag} onUpdateQty={updateBagQty} />
-            )}
+            <GroceryQtyStepper item={item} bag={bag} onAdd={addToBag} onUpdateQty={updateBagQty} />
           </div>
         </div>
       </article>
@@ -927,8 +892,8 @@ export default function App() {
                                   width: '32px',
                                   height: '32px',
                                   borderRadius: '0.5rem',
-                                  objectFit: 'contain',
-                                  background: 'radial-gradient(circle, #f8f5ff 0%, #e4dcf5 100%)',
+                                  objectFit: 'cover',
+                                  background: '#efe8de',
                                   border: '1.5px solid #141417',
                                 }}
                               />
@@ -964,24 +929,11 @@ export default function App() {
                         borderRadius: '1.15rem',
                         border: '2px solid #141417',
                         overflow: 'hidden',
-                        aspectRatio: '16 / 12',
-                        background: 'radial-gradient(circle at 50% 42%, rgba(255, 250, 244, 0.94) 0%, rgba(235, 229, 246, 0.88) 62%, rgba(212, 203, 232, 0.96) 100%)',
+                        aspectRatio: '1 / 1',
+                        background: '#efe8de',
                         position: 'relative',
                       }}
                     >
-                      <div
-                        aria-hidden="true"
-                        style={{
-                          position: 'absolute',
-                          left: '16%',
-                          right: '16%',
-                          bottom: '8%',
-                          height: '22px',
-                          borderRadius: '50%',
-                          background: 'radial-gradient(ellipse at center, rgba(20, 20, 23, 0.30) 0%, transparent 72%)',
-                          pointerEvents: 'none',
-                        }}
-                      />
                       <img
                         key={activeHero.id}
                         src={activeHero.pedestal_transparent_url || activeHero.image_url}
@@ -991,11 +943,11 @@ export default function App() {
                           zIndex: 1,
                           width: '100%',
                           height: '100%',
-                          objectFit: 'contain',
-                          objectPosition: 'bottom center',
+                          objectFit: 'cover',
+                          objectPosition: 'center bottom',
                           backgroundColor: 'transparent',
-                          padding: '16px 16px 12%',
-                          filter: 'drop-shadow(0 16px 18px rgba(20, 20, 30, 0.28))',
+                          padding: 0,
+                          filter: 'none',
                           display: 'block',
                         }}
                       />
@@ -1124,7 +1076,7 @@ export default function App() {
                           }}
                         >
                           {filledItem ? (
-                            <img src={filledItem.pedestal_transparent_url || filledItem.image_url} alt={filledItem.name} style={{ width: '100%', height: '100%', objectFit: 'contain', background: 'radial-gradient(circle, #f8f5ff 0%, #e4dcf5 100%)', padding: '2px' }} />
+                            <img src={filledItem.pedestal_transparent_url || filledItem.image_url} alt={filledItem.name} style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#efe8de', padding: 0 }} />
                           ) : (
                             <span className="font-neo" style={{ opacity: 0.55 }}>0{slotIdx + 1}</span>
                           )}
@@ -1291,8 +1243,8 @@ export default function App() {
                       width: '32px',
                       height: '32px',
                       borderRadius: '50%',
-                      objectFit: 'contain',
-                      backgroundColor: '#ffffff',
+                      objectFit: 'cover',
+                      backgroundColor: '#efe8de',
                       border: '2px solid #141417',
                       marginLeft: i === 0 ? 0 : '-8px',
                     }}
@@ -1409,8 +1361,8 @@ export default function App() {
             </button>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.65rem', alignItems: 'start' }}>
-              <div style={{ borderRadius: '1.15rem', border: '2px solid var(--border)', overflow: 'hidden', background: 'radial-gradient(circle at 50% 42%, rgba(255, 250, 244, 0.94) 0%, rgba(235, 229, 246, 0.88) 62%, rgba(212, 203, 232, 0.96) 100%)', padding: '14px', aspectRatio: '1 / 1', position: 'relative' }}>
-                <img src={selectedProduct.pedestal_transparent_url || selectedProduct.image_url} alt={selectedProduct.name} style={{ width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'bottom center', filter: 'drop-shadow(0 14px 16px rgba(20, 20, 30, 0.28))', display: 'block' }} />
+              <div style={{ borderRadius: '1.15rem', border: '2px solid var(--border)', overflow: 'hidden', background: '#efe8de', padding: 0, aspectRatio: '1 / 1', position: 'relative' }}>
+                <img src={selectedProduct.pedestal_transparent_url || selectedProduct.image_url} alt={selectedProduct.name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center bottom', padding: 0, filter: 'none', display: 'block' }} />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
@@ -1450,26 +1402,13 @@ export default function App() {
                 </p>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  {selectedProduct.track === 'TRACK_B_PARTNER' && selectedProduct.partner_url ? (
-                    <a
-                      href={selectedProduct.partner_url}
-                      target="_blank"
-                      rel="noopener noreferrer sponsored"
-                      className="btn-primary"
-                      style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
-                    >
-                      <span>Shop Official Store ({selectedProduct.partner_name || selectedProduct.brand})</span>
-                      <ExternalLink size={15} />
-                    </a>
-                  ) : (
-                    <GroceryQtyStepper
-                      item={selectedProduct}
-                      bag={bag}
-                      onAdd={addToBag}
-                      onUpdateQty={updateBagQty}
-                      size="lg"
-                    />
-                  )}
+                  <GroceryQtyStepper
+                    item={selectedProduct}
+                    bag={bag}
+                    onAdd={addToBag}
+                    onUpdateQty={updateBagQty}
+                    size="lg"
+                  />
                 </div>
 
                 <div style={{ paddingTop: '0.65rem', borderTop: '1.5px dashed var(--border-subtle)', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
@@ -1542,7 +1481,7 @@ export default function App() {
                         backgroundColor: 'var(--surface-muted)',
                       }}
                     >
-                      <img src={item.pedestal_transparent_url || item.image_url} alt={item.name} style={{ width: '52px', height: '52px', objectFit: 'contain', background: 'radial-gradient(circle, #f8f5ff 0%, #e4dcf5 100%)', padding: '2px', borderRadius: '0.55rem', border: '1.5px solid #141417' }} />
+                      <img src={item.pedestal_transparent_url || item.image_url} alt={item.name} style={{ width: '52px', height: '52px', objectFit: 'cover', background: '#efe8de', padding: 0, borderRadius: '0.55rem', border: '1.5px solid #141417' }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>{item.name}</div>
                         <div className="tabular-nums font-neo" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
