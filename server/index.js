@@ -619,12 +619,17 @@ app.get('/sitemap.xml', (req, res) => {
 
 app.get('/api/catalog', (_req, res) => {
   const store = readStore();
+  const baseById = new Map(loadCatalog().map((x) => [x.id, x]));
   const catalog = livePriceSync
-    .applyLivePriceOverrides(loadCatalog())
+    .applyLivePriceOverrides(Array.from(baseById.values()))
     .map(({ cost_usd: _hiddenCost, verified_source_url: _vsu, verified_image_source: _vis, ...publicSku }) => {
       const isDirect = publicSku.track === 'TRACK_A_DIRECT';
+      const rawSku = baseById.get(publicSku.id) || publicSku;
+      const margins = computeSkuMargins({ ...rawSku, ...publicSku });
       return {
         ...publicSku,
+        max_vault_discount_pct: margins.max_vault_discount_pct,
+        max_discount_pct: margins.max_discount_pct,
         partner_url: isDirect ? null : publicSku.partner_url || null,
         partner_name: isDirect ? null : publicSku.partner_name || null,
         compliance_verified: Boolean(publicSku.cpsia_astm_note && publicSku.fda_wellness_note),

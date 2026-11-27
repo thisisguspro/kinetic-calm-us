@@ -187,6 +187,7 @@ export function createLivePriceSync({
         : Number(it.sale_price_usd || it.price_usd || it.base_price_usd || 0);
 
     if (currency === 'BRL') {
+      const isTrackADirect = String(it.fulfillment_track || it.track || '').toUpperCase() === 'TRACK_A_DIRECT';
       const cmpOut = live.listPrice > live.currentPrice + 0.01 ? live.listPrice : null;
       const pixOut = live.pixPrice > 0 && live.pixPrice < live.currentPrice - 0.01 ? live.pixPrice : live.currentPrice;
       patch.price_brl = live.currentPrice;
@@ -194,7 +195,10 @@ export function createLivePriceSync({
       patch.compare_at_brl = cmpOut;
       patch.sale_price_brl = cmpOut ? live.currentPrice : null;
       patch.pix_price_brl = pixOut;
-      patch.on_sale = Boolean(cmpOut || pixOut < live.currentPrice - 0.01);
+      patch.on_sale = isTrackADirect ? Boolean(cmpOut) : Boolean(cmpOut || pixOut < live.currentPrice - 0.01);
+      if (isTrackADirect && Number(it.wholesale_cost_ratio) > 0) {
+        patch.cost_brl = round2(live.currentPrice * Number(it.wholesale_cost_ratio));
+      }
       patch.price_verified_at = today;
       patch.in_stock_at_supplier = live.inStock;
       if (it.fixation_hours) {
@@ -216,6 +220,9 @@ export function createLivePriceSync({
       patch.sale_price_usd = cmpOut ? live.currentPrice : null;
       patch.compare_at_usd = cmpOut;
       patch.is_on_promotion = Boolean(cmpOut);
+      if (Number(it.wholesale_cost_ratio) > 0) {
+        patch.cost_usd = round2(live.currentPrice * Number(it.wholesale_cost_ratio));
+      }
       patch.price_verified_at = today;
       changed =
         Math.abs(oldCur - live.currentPrice) > 0.01 ||
@@ -227,6 +234,9 @@ export function createLivePriceSync({
       patch.compare_at_usd = cmpOut;
       patch.sale_price_usd = cmpOut ? live.currentPrice : null;
       patch.on_sale = Boolean(cmpOut);
+      if (Number(it.wholesale_cost_ratio) > 0) {
+        patch.cost_usd = round2(live.currentPrice * Number(it.wholesale_cost_ratio));
+      }
       patch.price_verified_at = today;
       if (it.tagline_en) {
         patch.tagline_en = replaceTextPrice(it.tagline_en, '$', live.currentPrice);
@@ -244,7 +254,7 @@ export function createLivePriceSync({
     const host = new URL(url).host.toLowerCase();
     // Never scrape Amazon HTML; Amazon pricing is gated cleanly behind PA-API 5.0 when configured.
     if (host.includes('amazon.')) return null;
-    const isVtex = ['epocacosmeticos', 'santalolla', 'vivara', 'swarovski'].some((h) => host.includes(h));
+    const isVtex = ['epocacosmeticos', 'santalolla', 'vivara', 'swarovski', 'keydesign', 'morana', 'montecarlo'].some((h) => host.includes(h));
     const oldCur =
       currency === 'BRL'
         ? Number(it.sale_price_brl || it.price_brl || it.base_price_brl || 0)

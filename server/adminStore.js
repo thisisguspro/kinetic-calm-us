@@ -253,6 +253,7 @@ export function computeSkuMargins(item) {
     return {
       full_price_margin_pct: null,
       max_vault_discount_pct: 0,
+      max_discount_pct: 0,
       discounted_30_margin_pct: null,
       passes_20pct_floor: true,
     };
@@ -260,15 +261,28 @@ export function computeSkuMargins(item) {
   const stripeFull = effectiveRetail * STRIPE_FEE_PCT + STRIPE_FIXED_USD;
   const fullMargin = ((effectiveRetail - cost - stripeFull) / effectiveRetail) * 100;
 
+  const rawExactSafeCap =
+    effectiveRetail > 0 && cost > 0
+      ? Math.floor(
+          (1 -
+            (cost + STRIPE_FIXED_USD) /
+              ((1 - MIN_NET_MARGIN_PCT / 100 - STRIPE_FEE_PCT) * effectiveRetail)) *
+            100
+        )
+      : 0;
+  const candidateCap = Math.min(MAX_LOYALTY_DISCOUNT_PCT, Math.max(0, rawExactSafeCap));
   const appliedMaxDisc =
-    item.vault_discount_eligible && !item.is_on_promotion ? MAX_LOYALTY_DISCOUNT_PCT : 0;
-  const discountedPrice = effectiveRetail * (1 - appliedMaxDisc / 100);
+    item.vault_discount_eligible && !item.is_on_promotion && candidateCap >= 10
+      ? candidateCap
+      : 0;
+  const discountedPrice = Number((effectiveRetail * (1 - appliedMaxDisc / 100)).toFixed(2));
   const stripeDisc = discountedPrice * STRIPE_FEE_PCT + STRIPE_FIXED_USD;
   const discMargin = ((discountedPrice - cost - stripeDisc) / discountedPrice) * 100;
 
   return {
     full_price_margin_pct: Number(fullMargin.toFixed(2)),
     max_vault_discount_pct: appliedMaxDisc,
+    max_discount_pct: appliedMaxDisc,
     discounted_30_margin_pct: Number(discMargin.toFixed(2)),
     passes_20pct_floor: fullMargin >= MIN_NET_MARGIN_PCT && discMargin >= MIN_NET_MARGIN_PCT,
   };
@@ -286,6 +300,7 @@ export function computeServerQuote(
   const store = readStore();
 
   const normalizedItems = [];
+  const vaultLines = [];
   let subtotal = 0;
   let eligibleVaultSubtotal = 0;
   let wholesaleTotal = 0;
@@ -305,8 +320,10 @@ export function computeServerQuote(
     totalDirectQty += qty;
     wholesaleTotal += Number(sku.cost_usd || 0) * qty;
     if (sku.is_on_promotion) hasPromoItem = true;
-    if (sku.vault_discount_eligible && !sku.is_on_promotion) {
+    const skuMargins = computeSkuMargins(sku);
+    if (sku.vault_discount_eligible && !sku.is_on_promotion && skuMargins.max_vault_discount_pct > 0) {
       eligibleVaultSubtotal += lineTotal;
+      vaultLines.push({ lineTotal, capPct: skuMargins.max_vault_discount_pct });
     }
     normalizedItems.push({
       id: sku.id,
@@ -351,7 +368,10 @@ export function computeServerQuote(
     const availableVaultPct = vaultRemainingPct;
     const appliedPct = Math.min(requestedPct, availableVaultPct, MAX_LOYALTY_DISCOUNT_PCT);
     if (appliedPct > 0) {
-      const rawVaultDiscount = (eligibleVaultSubtotal * appliedPct) / 100;
+      const rawVaultDiscount = vaultLines.reduce(
+        (sum, ln) => sum + (ln.lineTotal * Math.min(appliedPct, ln.capPct)) / 100,
+        0
+      );
       discountUsd = Number(Math.min(rawVaultDiscount, maxSafeDiscount).toFixed(2));
       const actualEffectivePct = subtotal > 0 ? Math.min(appliedPct, Math.round((discountUsd / Math.max(0.01, eligibleVaultSubtotal)) * 100)) : appliedPct;
       vaultAppliedPct = Math.max(0, appliedPct);
