@@ -94,11 +94,7 @@ export default function App() {
   });
   const [gusproEligibleOnly, setGusproEligibleOnly] = useState(gusproArrived);
   const [gusproPopupOpen, setGusproPopupOpen] = useState(gusproArrived);
-  const gusproHubUrl =
-    typeof window !== 'undefined' &&
-    (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost')
-      ? 'http://127.0.0.1:3010/?region=US'
-      : 'https://guspro.com/?region=US';
+  const gusproHubUrl = 'https://guspro-district.onrender.com/?region=US';
   const [catalog, setCatalog] = useState([]);
   const [activeCollection, setActiveCollection] = useState('all');
   const [soundFilter, setSoundFilter] = useState('all');

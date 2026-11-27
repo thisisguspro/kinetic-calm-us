@@ -128,7 +128,7 @@ export default function LegalViews({ open, initialTab = 'fda', onClose }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <h3 style={{ margin: 0, fontSize: '1.05rem' }}>Terms of Service (United States)</h3>
               <p style={{ margin: 0 }}>
-                Welcome to KINETIC CALM US (operated by Antonella Venture Studio LLC, US Storefront #5 on http://localhost:3007). By browsing our catalog or submitting an order quote, you agree to these Terms of Service and our age-grading guidelines.
+                Welcome to KINETIC CALM US (operated by Antonella Venture Studio LLC, US Storefront #5 on https://kinetic-calm-us.onrender.com). By browsing our catalog or submitting an order quote, you agree to these Terms of Service and our age-grading guidelines.
               </p>
               <p style={{ margin: 0 }}>
                 <strong>Track A Direct vs. Track B Partner Links:</strong> Track A products ship directly through our verified US fulfillment studio with Stripe USD checkout protection. Track B products (such as third-party branded rollers or cubes) link transparently to official external marketplaces where partner terms apply.
