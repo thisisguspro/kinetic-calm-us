@@ -87,6 +87,18 @@ export default function App() {
   const [heroScrollPct, setHeroScrollPct] = useState(0);
   const [cardTilt, setCardTilt] = useState({ rx: 0, ry: 0 });
 
+  const [gusproArrived] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const sp = new URLSearchParams(window.location.search);
+    return sp.get('guspro_filter') === 'eligible' || sp.get('from') === 'guspro';
+  });
+  const [gusproEligibleOnly, setGusproEligibleOnly] = useState(gusproArrived);
+  const [gusproPopupOpen, setGusproPopupOpen] = useState(gusproArrived);
+  const gusproHubUrl =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost')
+      ? 'http://127.0.0.1:3010/?region=US'
+      : 'https://guspro.com/?region=US';
   const [catalog, setCatalog] = useState([]);
   const [activeCollection, setActiveCollection] = useState('all');
   const [soundFilter, setSoundFilter] = useState('all');
@@ -348,13 +360,23 @@ export default function App() {
   const filteredItems = useMemo(() => {
     return catalog.filter((item) => {
       if (activeCollection !== 'all' && item.collection !== activeCollection) return false;
+      if (
+        gusproEligibleOnly &&
+        (item.is_on_promotion ||
+          item.on_sale ||
+          item.vault_discount_eligible === false ||
+          item.vault_qualified === false ||
+          ((item.track || item.fulfillment_track) && (item.track || item.fulfillment_track) !== 'TRACK_A_DIRECT'))
+      ) {
+        return false;
+      }
       if (soundFilter !== 'all') {
         const sp = classifySoundProfile(item);
         if (sp.kind !== soundFilter) return false;
       }
       return true;
     });
-  }, [catalog, activeCollection, soundFilter]);
+  }, [catalog, activeCollection, soundFilter, gusproEligibleOnly]);
 
   const heroItems = useMemo(() => {
     if (!catalog.length) return [];
@@ -592,6 +614,130 @@ export default function App() {
         >
           <CheckCircle2 size={15} />
           <span>{toastMsg}</span>
+        </div>
+      )}
+
+      <div
+        className="guspro-network-strip"
+        style={{
+          background: '#111827',
+          color: '#f8fafc',
+          borderBottom: '1px solid rgba(245, 208, 97, 0.35)',
+          padding: '6px 18px',
+          fontSize: '0.72rem',
+          letterSpacing: '0.05em',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '8px',
+        }}
+      >
+        <a
+          href={gusproHubUrl}
+          style={{
+            color: '#fbbf24',
+            fontWeight: 700,
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <span
+            style={{
+              border: '1px solid rgba(251, 191, 36, 0.55)',
+              padding: '1px 7px',
+              borderRadius: '4px',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              fontSize: '0.66rem',
+            }}
+          >
+            by GusPro
+          </span>
+          <span style={{ color: '#f1f5f9', fontWeight: 500 }}>
+            Shared GusPro % Rewards Network • View all accumulating boutiques
+          </span>
+        </a>
+        <a
+          href={gusproHubUrl}
+          style={{ color: '#fbbf24', textDecoration: 'underline', fontWeight: 700, fontSize: '0.72rem' }}
+        >
+          GusPro District US
+        </a>
+      </div>
+
+      {gusproPopupOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="GusPro Filter Notice"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1400,
+            background: 'rgba(15, 20, 26, 0.68)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+        >
+          <div
+            className="surface-card"
+            style={{
+              maxWidth: '500px',
+              width: '100%',
+              background: '#fffaf3',
+              color: '#18181b',
+              border: '2px solid #18181b',
+              borderRadius: '1.1rem',
+              padding: '1.35rem 1.5rem',
+              boxShadow: '0 24px 60px rgba(0, 0, 0, 0.35)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9a3412' }}>
+                FILTER ACTIVE • % POINTS BY GUSPRO
+              </span>
+              <button
+                type="button"
+                aria-label="Close notice"
+                onClick={() => setGusproPopupOpen(false)}
+                style={{ background: 'transparent', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#18181b', lineHeight: 1 }}
+              >
+                ✕
+              </button>
+            </div>
+            <h3 className="font-neo" style={{ fontSize: '1.22rem', fontWeight: 800, margin: '0 0 8px', color: '#18181b' }}>
+              Showing only % discount-eligible items
+            </h3>
+            <p style={{ fontSize: '0.84rem', lineHeight: 1.55, color: '#3f3f46', margin: '0 0 16px' }}>
+              Because you arrived from the GusPro portal, we filtered this boutique to show only items that accept your shared % discount points (each qualifying SKU enforces up to its listed cap). Not every product participates. Remove the filter anytime to browse all items.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ padding: '0.58rem 1rem', fontSize: '0.78rem' }}
+                onClick={() => setGusproPopupOpen(false)}
+              >
+                Keep % Eligible Filter
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                style={{ padding: '0.58rem 1rem', fontSize: '0.78rem' }}
+                onClick={() => {
+                  setGusproEligibleOnly(false);
+                  setGusproPopupOpen(false);
+                }}
+              >
+                Show All Items
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1115,6 +1261,14 @@ export default function App() {
                         {sf.label}
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => setGusproEligibleOnly((prev) => !prev)}
+                      className={gusproEligibleOnly ? 'btn-primary' : 'btn-ghost'}
+                      style={{ padding: '0.34rem 0.78rem', fontSize: '0.73rem' }}
+                    >
+                      {gusproEligibleOnly ? '% Eligible Only (On)' : '% Eligible Filter'}
+                    </button>
                   </div>
                 </div>
               </div>

@@ -197,7 +197,7 @@ export function upsertGoogleUser({ googleId, email, name, avatarUrl = null, refe
       ...(store.customers[cleanEmail] || {}),
       user_id: existing.id,
       referral_code: existing.referral_code,
-      max_unlocked_pct: Math.min(MAX_LOYALTY_DISCOUNT_PCT, Number(existing.unlocked_vault_pct || 0)),
+      max_unlocked_pct: Math.max(0, Math.floor(Number(existing.unlocked_vault_pct || 0))),
       friend_welcome_eligible: Boolean(existing.referred_by_code && !existing.friend_welcome_used),
     };
   }
@@ -336,6 +336,8 @@ export function computeServerQuote(
   let discountUsd = 0;
   let discountSource = 'NONE';
   let capNote = '';
+  let vaultAppliedPct = 0;
+  let vaultRemainingPct = customerRecord ? Math.max(0, Math.floor(Number(customerRecord.max_unlocked_pct || 0))) : 0;
 
   // Priority (strictly non-stackable so discounts never compound past 30% or 20% margin floor):
   // 1) Explicit Promo Code -> 2) Calm Club Vault Credit -> 3) Friend Referral Welcome (10%) -> 4) Automatic 3-Piece Calm Kit Bundle (12%)
@@ -345,16 +347,17 @@ export function computeServerQuote(
     discountSource = `PROMO_${cleanPromo}_${pct}%`;
     capNote = `Promo code ${cleanPromo} (${pct}% off) applied — non-stackable with bundle or referral credits.`;
   } else if (Number(useVaultDiscountPct) > 0 && !hasPromoItem && eligibleVaultSubtotal > 0) {
-    const requestedPct = Math.min(MAX_LOYALTY_DISCOUNT_PCT, Math.max(0, Number(useVaultDiscountPct)));
-    const availableVaultPct = customerRecord
-      ? Math.min(MAX_LOYALTY_DISCOUNT_PCT, Number(customerRecord.max_unlocked_pct || 0))
-      : 0;
-    const appliedPct = Math.min(requestedPct, availableVaultPct);
+    const requestedPct = Math.min(MAX_LOYALTY_DISCOUNT_PCT, Math.max(0, Math.floor(Number(useVaultDiscountPct))));
+    const availableVaultPct = vaultRemainingPct;
+    const appliedPct = Math.min(requestedPct, availableVaultPct, MAX_LOYALTY_DISCOUNT_PCT);
     if (appliedPct > 0) {
       const rawVaultDiscount = (eligibleVaultSubtotal * appliedPct) / 100;
       discountUsd = Number(Math.min(rawVaultDiscount, maxSafeDiscount).toFixed(2));
+      const actualEffectivePct = subtotal > 0 ? Math.min(appliedPct, Math.round((discountUsd / Math.max(0.01, eligibleVaultSubtotal)) * 100)) : appliedPct;
+      vaultAppliedPct = Math.max(0, appliedPct);
+      vaultRemainingPct = Math.max(0, availableVaultPct - vaultAppliedPct);
       discountSource = `CALM_VAULT_${appliedPct}%`;
-      capNote = `Calm Club Referral Credit (${appliedPct}% off, 30% max cap) applied.`;
+      capNote = `Calm Club Credit (-${appliedPct}% up to ${MAX_LOYALTY_DISCOUNT_PCT}% item cap; ${vaultRemainingPct} pts remaining from ${availableVaultPct} pts banked). Effective margin-safe discount: ${actualEffectivePct}%.`;
     }
   } else if (
     !hasPromoItem &&
@@ -397,6 +400,8 @@ export function computeServerQuote(
     subtotal_usd: Number(subtotal.toFixed(2)),
     discount_usd: discountUsd,
     discount_source: discountSource,
+    vault_applied_pct: vaultAppliedPct,
+    vault_remaining_pct: vaultRemainingPct,
     cap_note: capNote,
     shipping_usd: shippingUsd,
     free_shipping_threshold_usd: FREE_US_SHIPPING_THRESHOLD,

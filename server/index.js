@@ -392,7 +392,7 @@ app.get('/api/my/referrals', requireAuth, (req, res) => {
     referrer_reward_per_friend_pct: 10,
     max_loyalty_cap_pct: MAX_LOYALTY_DISCOUNT_PCT,
     referrals_completed_count: Number(u.referrals_completed_count || 0),
-    unlocked_vault_pct: Math.min(MAX_LOYALTY_DISCOUNT_PCT, Number(u.unlocked_vault_pct || 0)),
+    unlocked_vault_pct: Math.max(0, Math.floor(Number(u.unlocked_vault_pct || 0))),
     pending_escrow_pct: Number(u.pending_escrow_pct || 0),
     referred_by_code: u.referred_by_code || null,
     friend_welcome_available: Boolean(u.referred_by_code && !u.friend_welcome_used),
@@ -718,8 +718,10 @@ function finalizePaidOrder(store, orderId, stripeSession) {
     const u = store.users?.[cust.user_id];
     if (u) {
       if (String(order.discount_source || '').startsWith('CALM_VAULT_')) {
-        u.unlocked_vault_pct = 0;
-        cust.max_unlocked_pct = 0;
+        const parsedFromTag = parseInt(String(order.discount_source || '').replace(/[^0-9]/g, ''), 10) || 0;
+        const usedPct = Math.max(0, Math.floor(Number(order.vault_applied_pct ?? parsedFromTag)));
+        u.unlocked_vault_pct = Math.max(0, Math.floor(Number(u.unlocked_vault_pct || 0)) - usedPct);
+        cust.max_unlocked_pct = u.unlocked_vault_pct;
       }
       if (String(order.discount_source || '').startsWith('FRIEND_REFERRAL_')) {
         u.friend_welcome_used = true;
@@ -731,7 +733,7 @@ function finalizePaidOrder(store, orderId, stripeSession) {
     const owner = Object.values(store.users || {}).find((u) => u.referral_code === order.referral_code);
     if (owner && normalizeEmail(owner.email) !== customerEmail) {
       owner.referrals_completed_count = Number(owner.referrals_completed_count || 0) + 1;
-      owner.unlocked_vault_pct = Math.min(MAX_LOYALTY_DISCOUNT_PCT, Number(owner.unlocked_vault_pct || 0) + 10);
+      owner.unlocked_vault_pct = Math.floor(Number(owner.unlocked_vault_pct || 0)) + 10;
       if (store.customers?.[normalizeEmail(owner.email)]) {
         store.customers[normalizeEmail(owner.email)].max_unlocked_pct = owner.unlocked_vault_pct;
       }
@@ -826,6 +828,7 @@ app.post('/api/checkout', async (req, res) => {
       subtotal_usd: quote.subtotal_usd,
       discount_usd: quote.discount_usd,
       discount_source: quote.discount_source,
+      vault_applied_pct: quote.vault_applied_pct || 0,
       shipping_usd: quote.shipping_usd,
       total_usd: quote.total_usd,
       free_gift_unlocked: Boolean(quote.free_gift_unlocked),
