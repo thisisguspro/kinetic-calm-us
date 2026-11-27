@@ -221,7 +221,32 @@ function loginWithSessionRegeneration(req, res, next, user, redirectUrl) {
   });
 }
 
-// 3. Strict CSRF Guard on State-Changing Routes
+// 3. Per-IP Rate Limiter + Strict CSRF Guard on State-Changing Routes
+const rateBuckets = new Map();
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health' || req.path.startsWith('/webhooks/stripe')) return next();
+  const ip = req.ip || req.socket?.remoteAddress || '127.0.0.1';
+  const now = Date.now();
+  if (rateBuckets.size > 2000) {
+    for (const [k, v] of rateBuckets.entries()) {
+      if (now - v.t > 60000) rateBuckets.delete(k);
+    }
+  }
+  const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  const bucketKey = `${ip}:${isMutation ? 'w' : 'r'}`;
+  const rec = rateBuckets.get(bucketKey);
+  if (!rec || now - rec.t > 60000) {
+    rateBuckets.set(bucketKey, { t: now, c: 1 });
+  } else {
+    rec.c += 1;
+    const cap = isMutation ? 30 : 180;
+    if (rec.c > cap) {
+      return res.status(429).json({ error: 'Rate limit exceeded. Please wait a moment.' });
+    }
+  }
+  return next();
+});
+
 const TRUSTED_PROD_HOSTS = new Set([
   'kineticcalm.us',
   'www.kineticcalm.us',
