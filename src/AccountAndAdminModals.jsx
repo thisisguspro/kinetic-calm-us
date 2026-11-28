@@ -258,18 +258,42 @@ export function CustomerAccountModal({
                       </div>
                     </div>
                   ) : (
-                    ordersData.orders.map((ord) => (
-                      <div key={ord.id} className="surface-card" style={{ padding: '0.95rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 800 }}>
-                          <span className="font-neo">Order #{ord.id}</span>
-                          <span>${Number(ord.total_usd || 0).toFixed(2)}</span>
+                    ordersData.orders.map((ord) => {
+                      const addr = ord.shipping_address;
+                      const ordItems = Array.isArray(ord.items) ? ord.items : [];
+                      return (
+                        <div key={ord.id} className="surface-card" style={{ padding: '0.95rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 800 }}>
+                            <span className="font-neo">Order #{ord.id}</span>
+                            <span>${Number(ord.total_usd || 0).toFixed(2)}</span>
+                          </div>
+                          {ordItems.length > 0 && (
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text)' }}>
+                              {ordItems.map((it, i) => (
+                                <div key={`${ord.id}-it-${i}`}>
+                                  {it.quantity || 1}x {it.name || it.id}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {addr && addr.street && (
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                              Ship to: {addr.full_name} — {addr.street}
+                              {addr.apt ? `, ${addr.apt}` : ''}, {addr.city}, {addr.state} {addr.zip}
+                            </div>
+                          )}
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            Status: <strong>{ord.status || 'PAID'}</strong>
+                            {ord.tracking_number ? ` • Tracking: ${ord.tracking_number}` : ''}
+                          </div>
+                          {ord.fulfillment_status === 'REQUEST_SENT_AFTER_PAYMENT' && (
+                            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--mint-strong)' }}>
+                              Supplier fulfillment request dispatched after payment
+                            </div>
+                          )}
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          Status: <strong>{ord.status || 'PROCESSING'}</strong>
-                          {ord.tracking_number ? ` • Tracking: ${ord.tracking_number}` : ''}
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               )}

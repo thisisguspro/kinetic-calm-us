@@ -393,11 +393,63 @@ function requireSuperAdminAuth(req, res, next) {
 // ============================================================================
 // 5. AUTHENTICATED CUSTOMER ORDERS & LUNA-STYLE REFERRAL VAULT ROUTES
 // ============================================================================
+const UNPAID_STATUSES_KC = new Set([
+  'PENDING_PAYMENT',
+  'AWAITING_PAYMENT',
+  'CANCELLED_UNPAID',
+  'EXPIRED_UNPAID'
+]);
+
+const VALID_US_STATES_KC = new Set([
+  'AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA',
+  'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM',
+  'NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA',
+  'WV','WI','WY'
+]);
+
+function validateUsShippingAddress(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { ok: false, error: 'Complete US shipping address is required before checkout.' };
+  }
+  const fullName = String(raw.full_name || raw.name || '').trim().slice(0, 120);
+  const phoneDigits = String(raw.phone || '').replace(/\D/g, '').slice(0, 15);
+  const street = String(raw.street || raw.line1 || '').trim().slice(0, 160);
+  const apt = String(raw.apt || raw.line2 || raw.complement || '').trim().slice(0, 80);
+  const city = String(raw.city || '').trim().slice(0, 100);
+  const state = String(raw.state || '').trim().toUpperCase().slice(0, 2);
+  const zipRaw = String(raw.zip || raw.postal_code || '').trim();
+  const zipMatch = zipRaw.match(/^(\d{5})(?:-?(\d{4}))?$/);
+
+  if (fullName.length < 2) return { ok: false, error: 'Recipient full name is required.' };
+  if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+    return { ok: false, error: 'Valid 10-digit US phone number is required.' };
+  }
+  if (street.length < 3) return { ok: false, error: 'Street address is required.' };
+  if (city.length < 2) return { ok: false, error: 'City is required.' };
+  if (!VALID_US_STATES_KC.has(state)) return { ok: false, error: 'Valid 2-letter US state code is required.' };
+  if (!zipMatch) return { ok: false, error: 'Valid 5-digit US ZIP code is required (e.g., 90210).' };
+
+  const cleanZip = zipMatch[2] ? `${zipMatch[1]}-${zipMatch[2]}` : zipMatch[1];
+  return {
+    ok: true,
+    shipping_address: {
+      full_name: fullName,
+      phone: phoneDigits,
+      street,
+      apt,
+      city,
+      state,
+      zip: cleanZip,
+      country: 'US'
+    }
+  };
+}
+
 app.get('/api/my/orders', requireAuth, (req, res) => {
   const store = readStore();
   const email = normalizeEmail(req.currentUser.email);
   const myOrders = store.orders
-    .filter((o) => normalizeEmail(o.customer_email || o.email) === email)
+    .filter((o) => normalizeEmail(o.customer_email || o.email) === email && !UNPAID_STATUSES_KC.has(o.status))
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
   res.json({
     zero_fake_data: true,
@@ -434,18 +486,19 @@ app.get('/api/admin/overview', requireAdminAuth, (req, res) => {
     ...sku,
     margins: computeSkuMargins(sku),
   }));
-  const totalRevenue = store.orders.reduce((s, o) => s + Number(o.total_usd || 0), 0);
+  const confirmedOrders = store.orders.filter((o) => !UNPAID_STATUSES_KC.has(o.status));
+  const totalRevenue = confirmedOrders.reduce((s, o) => s + Number(o.total_usd || 0), 0);
   res.json({
     ok: true,
     admin_user: req.currentUser,
     zero_fake_data: true,
     metrics: {
-      orders_count: store.orders.length,
+      orders_count: confirmedOrders.length,
       revenue_usd: Number(totalRevenue.toFixed(2)),
       waitlist_count: store.waitlist_subscribers.length,
       registered_members_count: Object.keys(store.users || {}).length,
     },
-    orders: store.orders.slice().reverse(),
+    orders: confirmedOrders.slice().reverse(),
     waitlist_subscribers: store.waitlist_subscribers.slice().reverse(),
     bundle_config: store.bundle_config,
     promo_codes: store.promo_codes,
@@ -586,6 +639,7 @@ app.post('/api/admin/co-admins', requireSuperAdminAuth, (req, res) => {
 // ============================================================================
 app.get('/api/health', (_req, res) => {
   const store = readStore();
+  const confirmedOrders = store.orders.filter((o) => !UNPAID_STATUSES_KC.has(o.status));
   res.json({
     ok: true,
     service: 'kinetic-calm-us',
@@ -595,7 +649,7 @@ app.get('/api/health', (_req, res) => {
     cpsia_astm_f963: true,
     google_login_enabled: true,
     admin_login_required: true,
-    orders_count: store.orders.length,
+    orders_count: confirmedOrders.length,
     reviews_count: store.reviews.length,
     ts: new Date().toISOString(),
   });
@@ -663,14 +717,15 @@ app.get('/api/referral-verify', (req, res) => {
 
 app.get('/api/stats', (_req, res) => {
   const store = readStore();
-  const totalRev = store.orders.reduce((acc, o) => acc + Number(o.total_usd || 0), 0);
+  const confirmedOrders = store.orders.filter((o) => !UNPAID_STATUSES_KC.has(o.status));
+  const totalRev = confirmedOrders.reduce((acc, o) => acc + Number(o.total_usd || 0), 0);
   const avgRating =
     store.reviews.length > 0
       ? Number((store.reviews.reduce((a, r) => a + Number(r.rating || 0), 0) / store.reviews.length).toFixed(2))
       : 0;
   res.json({
     zero_fake_data_enforced: true,
-    orders_count: store.orders.length,
+    orders_count: confirmedOrders.length,
     revenue_usd: Number(totalRev.toFixed(2)),
     reviews_count: store.reviews.length,
     average_rating: avgRating,
@@ -725,23 +780,91 @@ app.post('/api/waitlist', (req, res) => {
   });
 });
 
+function mergeUsStripeShipping(existingAddr, sessionObj) {
+  const addr = existingAddr && typeof existingAddr === 'object' ? { ...existingAddr } : {};
+  const sd = sessionObj?.shipping_details || {};
+  const cd = sessionObj?.customer_details || {};
+  const sa = sd.address || cd.address || {};
+  if (!addr.full_name && (sd.name || cd.name)) addr.full_name = String(sd.name || cd.name).trim();
+  if (!addr.phone && (sd.phone || cd.phone)) addr.phone = String(sd.phone || cd.phone).replace(/\D/g, '');
+  if (!addr.zip && sa.postal_code) addr.zip = String(sa.postal_code).trim();
+  if (!addr.street && sa.line1) addr.street = String(sa.line1).trim();
+  if (!addr.apt && sa.line2) addr.apt = String(sa.line2).trim();
+  if (!addr.city && sa.city) addr.city = String(sa.city).trim();
+  if (!addr.state && sa.state) addr.state = String(sa.state).trim().toUpperCase();
+  if (!addr.country) addr.country = sa.country || 'US';
+  return addr;
+}
+
 function finalizePaidOrder(store, orderId, stripeSession) {
-  const idx = store.orders.findIndex((o) => o.id === orderId);
-  if (idx < 0) return null;
-  const order = store.orders[idx];
-  if (order.status === 'PAID_CONFIRMED') return order;
+  store.pending_checkouts = Array.isArray(store.pending_checkouts) ? store.pending_checkouts : [];
+  store.fulfillment_requests = Array.isArray(store.fulfillment_requests) ? store.fulfillment_requests : [];
+  store.orders = Array.isArray(store.orders) ? store.orders : [];
+
+  const existingPaid = store.orders.find((o) => o.id === orderId && o.status === 'PAID_CONFIRMED');
+  if (existingPaid) return existingPaid;
+
+  const draftIdx = store.pending_checkouts.findIndex((d) => d.id === orderId);
+  let order = null;
+  let orderStoreIdx = store.orders.findIndex((o) => o.id === orderId);
 
   const nowIso = new Date().toISOString();
-  const customerEmail = normalizeEmail(stripeSession?.customer_details?.email || stripeSession?.customer_email || order.customer_email);
+  if (draftIdx !== -1) {
+    const [draft] = store.pending_checkouts.splice(draftIdx, 1);
+    order = { ...draft, created_at: nowIso };
+    store.orders.push(order);
+    orderStoreIdx = store.orders.length - 1;
+  } else if (orderStoreIdx >= 0) {
+    order = store.orders[orderStoreIdx];
+  } else {
+    return null;
+  }
+
+  const customerEmail = normalizeEmail(
+    stripeSession?.customer_details?.email || stripeSession?.customer_email || order.customer_email
+  );
+  const verifiedShipping = mergeUsStripeShipping(order.shipping_address, stripeSession);
+  const requestId = `FUL-${order.id}`;
+  const dispatches = (Array.isArray(order.items) ? order.items : []).map((line, idx) => ({
+    dispatch_id: `${requestId}-${idx + 1}`,
+    order_id: order.id,
+    product_id: line.id,
+    sku: line.sku || line.id,
+    product_name: line.name,
+    quantity: Math.max(1, Number(line.quantity || 1)),
+    ship_to: verifiedShipping,
+    status: 'REQUEST_SENT',
+    requested_at: nowIso,
+  }));
+
   order.status = 'PAID_CONFIRMED';
+  order.payment_verified = true;
+  order.payment_verified_at = nowIso;
   order.paid_at = nowIso;
   order.customer_email = customerEmail || order.customer_email;
+  order.shipping_address = verifiedShipping;
+  order.shipping_details = stripeSession?.shipping_details || order.shipping_details || verifiedShipping;
   order.stripe_payment_intent_id = stripeSession?.payment_intent || order.stripe_payment_intent_id || null;
-  order.shipping_details = stripeSession?.shipping_details || order.shipping_details || null;
+  order.fulfillment_status = 'REQUEST_SENT_AFTER_PAYMENT';
+  order.fulfillment_requested_at = nowIso;
+  order.fulfillment_request_id = requestId;
+  order.fulfillment_dispatches = dispatches;
   order.offer_fulfilled = true;
   order.offer_fulfillment_note = order.free_gift_unlocked
-    ? `${order.free_gift_label || 'Free Calm Strip Travel Pack'} packed with order + ${order.discount_source || 'standard pricing'} applied.`
-    : `${order.discount_source && order.discount_source !== 'NONE' ? `${order.discount_source} applied` : 'Direct order confirmed'}.`;
+    ? `${order.free_gift_label || 'Free Calm Strip Travel Pack'} packed with order + supplier fulfillment request sent (${requestId}).`
+    : `Payment verified & supplier fulfillment request sent (${requestId}).`;
+
+  if (!store.fulfillment_requests.some((r) => r.order_id === order.id)) {
+    store.fulfillment_requests.push({
+      request_id: requestId,
+      order_id: order.id,
+      customer_email: order.customer_email,
+      shipping_address: verifiedShipping,
+      dispatches,
+      status: 'REQUEST_SENT_AFTER_PAYMENT',
+      requested_at: nowIso,
+    });
+  }
 
   if (customerEmail && store.customers?.[customerEmail]) {
     const cust = store.customers[customerEmail];
@@ -769,14 +892,14 @@ function finalizePaidOrder(store, orderId, stripeSession) {
       }
     }
   }
-  store.orders[idx] = { ...order, updated_at: nowIso };
-  return store.orders[idx];
+  store.orders[orderStoreIdx] = { ...order, updated_at: nowIso };
+  return store.orders[orderStoreIdx];
 }
 
 app.post('/api/checkout', async (req, res) => {
-  const { items, promo_code, vault_discount_pct, email, referral_code } = req.body || {};
+  const { items, promo_code, vault_discount_pct, email, referral_code, shipping_address } = req.body || {};
   const sessionUser = req.user?.id ? getUserById(req.user.id) : null;
-  const cleanEmail = normalizeEmail(sessionUser?.email || email);
+  const cleanEmail = normalizeEmail(sessionUser?.email || shipping_address?.email || email);
   const effectiveRef = referral_code || req.session?.pendingReferralCode || '';
   const quote = computeServerQuote(items, promo_code, vault_discount_pct, cleanEmail, effectiveRef);
   if (!quote.items.length) {
@@ -785,38 +908,67 @@ app.post('/api/checkout', async (req, res) => {
   if (!quote.margin_guard_ok) {
     return res.status(400).json({ error: 'Order rejected by server-side 20% minimum net margin guard.' });
   }
+  const addrCheck = validateUsShippingAddress(shipping_address);
+  if (!addrCheck.ok) {
+    return res.status(400).json({ error: addrCheck.error });
+  }
+  const cleanAddress = addrCheck.shipping_address;
+  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
+    return res.status(400).json({ error: 'Valid contact email is required for order confirmation & tracking.' });
+  }
+
   const stripeKey = isRealCred(process.env.STRIPE_SECRET_KEY) ? process.env.STRIPE_SECRET_KEY.trim() : '';
   if (!stripeKey) {
     return res.status(503).json({
       ok: false,
       mode: 'STRIPE_KEY_REQUIRED',
       quote,
-      message: 'Live Stripe US Checkout requires STRIPE_SECRET_KEY in environment variables.',
+      error: 'Live Stripe US Checkout requires STRIPE_SECRET_KEY in environment variables. No order was placed.',
     });
   }
 
   const orderId = `KC-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
   const origin = `${req.protocol}://${req.get('host')}`;
+  const shippingSummary = `${cleanAddress.street}${cleanAddress.apt ? ` ${cleanAddress.apt}` : ''}, ${cleanAddress.city}, ${cleanAddress.state} ${cleanAddress.zip}`.slice(0, 420);
+
   const params = new URLSearchParams();
   params.set('mode', 'payment');
   params.set('success_url', `${origin}/?checkout=success&order=${encodeURIComponent(orderId)}&session_id={CHECKOUT_SESSION_ID}`);
   params.set('cancel_url', `${origin}/?checkout=cancelled&order=${encodeURIComponent(orderId)}`);
   params.set('shipping_address_collection[allowed_countries][0]', 'US');
+  params.set('phone_number_collection[enabled]', 'true');
   params.set('payment_method_types[0]', 'card');
-  if (cleanEmail && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
-    params.set('customer_email', cleanEmail);
+  params.set('customer_email', cleanEmail);
+
+  const discountedSub = Math.max(0.5, Number((quote.subtotal_usd - quote.discount_usd).toFixed(2)));
+  const totalProductCents = Math.max(50 * quote.items.length, Math.round(discountedSub * 100));
+  const weights = quote.items.map((l) => Math.max(1, Math.round(Number(l.line_total_usd || l.unit_price_usd || 1) * 100)));
+  const totalW = weights.reduce((a, b) => a + b, 0) || 1;
+  const allocatedCents = weights.map((w) => Math.max(50, Math.floor((totalProductCents * w) / totalW)));
+  let diffC = totalProductCents - allocatedCents.reduce((a, b) => a + b, 0);
+  let allocIdx = 0;
+  while (diffC !== 0 && allocatedCents.length > 0) {
+    const step = diffC > 0 ? 1 : -1;
+    if (step > 0 || allocatedCents[allocIdx] > 50) {
+      allocatedCents[allocIdx] += step;
+      diffC -= step;
+    }
+    allocIdx = (allocIdx + 1) % allocatedCents.length;
+    if (allocIdx === 0 && diffC < 0 && allocatedCents.every((v) => v <= 50)) break;
   }
 
-  const discountedSub = Math.max(0, Number((quote.subtotal_usd - quote.discount_usd).toFixed(2)));
-  params.set('line_items[0][price_data][currency]', 'usd');
-  params.set('line_items[0][price_data][unit_amount]', String(Math.max(50, Math.round(discountedSub * 100))));
-  params.set(
-    'line_items[0][price_data][product_data][name]',
-    `Kinetic Calm Sensory Order (${quote.total_direct_qty} items)${quote.discount_source !== 'NONE' ? ` — ${quote.discount_source}` : ''}`
-  );
-  params.set('line_items[0][quantity]', '1');
+  let lineIdx = 0;
+  quote.items.forEach((line, idx) => {
+    params.set(`line_items[${lineIdx}][price_data][currency]`, 'usd');
+    params.set(`line_items[${lineIdx}][price_data][unit_amount]`, String(allocatedCents[idx]));
+    params.set(
+      `line_items[${lineIdx}][price_data][product_data][name]`,
+      `${line.name} x${line.quantity}${quote.discount_source !== 'NONE' && idx === 0 ? ` (${quote.discount_source})` : ''}`
+    );
+    params.set(`line_items[${lineIdx}][quantity]`, '1');
+    lineIdx += 1;
+  });
 
-  let lineIdx = 1;
   if (quote.shipping_usd > 0) {
     params.set(`line_items[${lineIdx}][price_data][currency]`, 'usd');
     params.set(`line_items[${lineIdx}][price_data][unit_amount]`, String(Math.round(quote.shipping_usd * 100)));
@@ -834,6 +986,7 @@ app.post('/api/checkout', async (req, res) => {
   params.set('metadata[order_id]', orderId);
   params.set('metadata[discount_source]', quote.discount_source);
   params.set('metadata[free_gift_unlocked]', String(Boolean(quote.free_gift_unlocked)));
+  params.set('metadata[shipping_summary]', shippingSummary);
   if (effectiveRef) params.set('metadata[referral_code]', effectiveRef);
 
   try {
@@ -847,13 +1000,15 @@ app.post('/api/checkout', async (req, res) => {
       body: params.toString(),
     });
     const sessionData = await stripeRes.json();
-    if (!stripeRes.ok || !sessionData?.url) {
-      return res.status(502).json({ error: sessionData?.error?.message || 'Unable to initialize Stripe Checkout session.' });
+    if (!stripeRes.ok || !sessionData?.url || !sessionData?.id) {
+      return res.status(502).json({ error: sessionData?.error?.message || 'Unable to initialize Stripe Checkout session. No order was placed.' });
     }
     const store = readStore();
-    store.orders.push({
+    store.pending_checkouts = Array.isArray(store.pending_checkouts) ? store.pending_checkouts : [];
+    store.pending_checkouts.push({
       id: orderId,
-      customer_email: cleanEmail || '',
+      customer_email: cleanEmail,
+      shipping_address: cleanAddress,
       items: quote.items,
       subtotal_usd: quote.subtotal_usd,
       discount_usd: quote.discount_usd,
@@ -865,15 +1020,14 @@ app.post('/api/checkout', async (req, res) => {
       free_gift_label: quote.free_gift_label,
       referral_code: effectiveRef || null,
       stripe_session_id: sessionData.id,
-      status: 'PENDING_PAYMENT',
-      offer_fulfilled: false,
+      payment_verified: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
     writeStore(store);
     return res.json({
       ok: true,
-      order_id: orderId,
+      pending_order_id: orderId,
       stripe_session_id: sessionData.id,
       checkout_url: sessionData.url,
       quote,
@@ -881,6 +1035,25 @@ app.post('/api/checkout', async (req, res) => {
   } catch (err) {
     return res.status(502).json({ error: `Stripe gateway error: ${err.message}` });
   }
+});
+
+app.post('/api/checkout/abandon', (req, res) => {
+  const orderId = String(req.body?.order_id || '').trim().slice(0, 64);
+  if (!orderId) return res.status(400).json({ error: 'order_id is required.' });
+  const store = readStore();
+  store.pending_checkouts = Array.isArray(store.pending_checkouts) ? store.pending_checkouts : [];
+  const idx = store.pending_checkouts.findIndex((d) => d.id === orderId);
+  if (idx === -1) return res.json({ ok: true, already_removed: true });
+  const [draft] = store.pending_checkouts.splice(idx, 1);
+  writeStore(store);
+  const stripeKey = isRealCred(process.env.STRIPE_SECRET_KEY) ? process.env.STRIPE_SECRET_KEY.trim() : '';
+  if (stripeKey && draft.stripe_session_id) {
+    fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(draft.stripe_session_id)}/expire`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${stripeKey}` },
+    }).catch(() => {});
+  }
+  return res.json({ ok: true, cancelled_before_payment: true });
 });
 
 app.get('/api/checkout/verify', async (req, res) => {
@@ -962,9 +1135,15 @@ app.post('/api/webhooks/stripe', (req, res) => {
   if (event.type === 'checkout.session.completed') {
     const sessionObj = event.data?.object || {};
     const orderId = sessionObj.metadata?.order_id;
-    if (orderId) {
+    if (orderId && sessionObj.payment_status === 'paid') {
       finalizePaidOrder(store, orderId, sessionObj);
     }
+  } else if (event.type === 'checkout.session.expired') {
+    const sessionObj = event.data?.object || {};
+    const orderId = sessionObj.metadata?.order_id;
+    store.pending_checkouts = (store.pending_checkouts || []).filter(
+      (d) => !(orderId && d.id === orderId) && !(sessionObj.id && d.stripe_session_id === sessionObj.id)
+    );
   }
   if (event.id) {
     store.processed_webhooks[event.id] = new Date().toISOString();

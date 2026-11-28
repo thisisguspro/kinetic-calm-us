@@ -14,6 +14,7 @@ import {
   User,
   ShieldCheck,
   ExternalLink,
+  MapPin
 } from 'lucide-react';
 import LegalViews from './LegalViews.jsx';
 import {
@@ -33,6 +34,26 @@ const COLLECTIONS = [
   { id: 'clickers_sliders', label: 'Tactile Clickers' },
   { id: 'musical_plush', label: 'Musical Plush' },
 ];
+
+const KC_US_STATES = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL',
+  'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME',
+  'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH',
+  'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI',
+  'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+];
+
+function validateKcUsShipping(addr) {
+  if (!addr || typeof addr !== 'object') return 'Please enter your US shipping information.';
+  if (String(addr.full_name || '').trim().length < 2) return 'Please enter recipient full name.';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(addr.email || '').trim())) return 'Please enter a valid email address for tracking updates.';
+  if (String(addr.phone || '').replace(/\D/g, '').length < 10) return 'Please enter a valid 10-digit US phone number.';
+  if (String(addr.street || '').trim().length < 4) return 'Please enter your street address.';
+  if (String(addr.city || '').trim().length < 2) return 'Please enter your city.';
+  if (!KC_US_STATES.includes(String(addr.state || '').trim().toUpperCase())) return 'Please select a valid US state.';
+  if (!/^\d{5}(-\d{4})?$/.test(String(addr.zip || '').trim())) return 'Please enter a valid 5-digit US ZIP code.';
+  return '';
+}
 
 const SOUND_FILTERS = [
   { id: 'all', label: 'Any Sound' },
@@ -113,7 +134,35 @@ export default function App() {
   const [vaultDiscountPct, setVaultDiscountPct] = useState(0);
   const [quote, setQuote] = useState(null);
   const [checkoutStatus, setCheckoutStatus] = useState('');
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  const [shipping, setShipping] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('kc_shipping_v1') || '{}');
+      if (saved && typeof saved === 'object') {
+        return {
+          full_name: saved.full_name || '',
+          email: saved.email || '',
+          phone: saved.phone || '',
+          street: saved.street || '',
+          apt: saved.apt || '',
+          city: saved.city || '',
+          state: saved.state || 'CA',
+          zip: saved.zip || '',
+        };
+      }
+    } catch {}
+    return {
+      full_name: '',
+      email: '',
+      phone: '',
+      street: '',
+      apt: '',
+      city: '',
+      state: 'CA',
+      zip: '',
+    };
+  });
 
   const [authState, setAuthState] = useState({ authenticated: false, user: null });
   const [accountOpen, setAccountOpen] = useState(false);
@@ -154,6 +203,22 @@ export default function App() {
       localStorage.setItem('kc_us_bag', JSON.stringify(bag));
     } catch {}
   }, [bag]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('kc_shipping_v1', JSON.stringify(shipping));
+    } catch {}
+  }, [shipping]);
+
+  useEffect(() => {
+    if (authState?.user) {
+      setShipping((prev) => ({
+        ...prev,
+        full_name: prev.full_name || authState.user.name || '',
+        email: prev.email || authState.user.email || '',
+      }));
+    }
+  }, [authState?.user]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -204,11 +269,30 @@ export default function App() {
           .then((v) => {
             if (v?.paid && v?.order) {
               setBag([]);
+              try {
+                localStorage.removeItem('kc_us_bag');
+              } catch {}
               setBagOpen(true);
-              setCheckoutStatus(`Order ${v.order.id} paid & confirmed! ${v.order.offer_fulfillment_note || ''}`);
+              setCheckoutStatus(`Payment confirmed! Order ${v.order.id} is recorded in Order History and sent to fulfillment.`);
+            } else {
+              setBagOpen(true);
+              setCheckoutStatus(`Payment has not completed yet (${orderId}). Your bag items remain saved.`);
             }
           })
-          .catch(() => {});
+          .catch(() => {
+            setBagOpen(true);
+            setCheckoutStatus('Unable to verify Stripe session right now. Please refresh.');
+          });
+      } else if (checkoutFlag === 'cancelled') {
+        if (orderId) {
+          fetch('/api/checkout/abandon', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_id: orderId }),
+          }).catch(() => {});
+        }
+        setBagOpen(true);
+        setCheckoutStatus('Checkout cancelled before payment — no charge occurred and your bag items are saved.');
       }
       if ((openTarget || checkoutFlag) && window.history?.replaceState) {
         params.delete('open');
@@ -389,8 +473,18 @@ export default function App() {
   const activeHero = heroItems[heroIdx % Math.max(1, heroItems.length)] || catalog[0] || null;
   const activeHeroTheme = HERO_SLIDE_THEMES[heroIdx % HERO_SLIDE_THEMES.length];
 
-  const handleCheckout = async () => {
+  const handleCheckout = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (bag.length === 0 || checkoutBusy) return;
     setCheckoutStatus('');
+
+    const addrErr = validateKcUsShipping(shipping);
+    if (addrErr) {
+      setCheckoutStatus(addrErr);
+      return;
+    }
+
+    setCheckoutBusy(true);
     try {
       const r = await fetch('/api/checkout', {
         method: 'POST',
@@ -399,7 +493,18 @@ export default function App() {
           items: bag.map((i) => ({ id: i.id, quantity: i.quantity })),
           promo_code: promoCode,
           vault_discount_pct: vaultDiscountPct,
-          email: newsletterEmail,
+          email: shipping.email.trim(),
+          referral_code: referralCodeFromUrl || undefined,
+          shipping_address: {
+            full_name: shipping.full_name.trim(),
+            email: shipping.email.trim(),
+            phone: shipping.phone.trim(),
+            street: shipping.street.trim(),
+            apt: shipping.apt.trim(),
+            city: shipping.city.trim(),
+            state: shipping.state.trim().toUpperCase(),
+            zip: shipping.zip.trim(),
+          },
         }),
       });
       const data = await r.json();
@@ -408,9 +513,11 @@ export default function App() {
         window.location.assign(data.checkout_url);
         return;
       }
-      setCheckoutStatus(data?.message || data?.error || 'Checkout ready.');
+      setCheckoutStatus(data?.message || data?.error || 'Unable to start Stripe Checkout.');
     } catch {
-      setCheckoutStatus('Unable to connect right now.');
+      setCheckoutStatus('Unable to connect right now. Your bag items remain saved.');
+    } finally {
+      setCheckoutBusy(false);
     }
   };
 
@@ -1591,7 +1698,7 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
             style={{
               width: '100%',
-              maxWidth: '420px',
+              maxWidth: '460px',
               height: '100%',
               backgroundColor: 'var(--surface)',
               borderLeft: '2px solid var(--border)',
@@ -1599,7 +1706,8 @@ export default function App() {
               overflowY: 'auto',
               display: 'flex',
               flexDirection: 'column',
-              gap: '1rem',
+              gap: '0.95rem',
+              boxSizing: 'border-box',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1682,15 +1790,120 @@ export default function App() {
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={handleCheckout}
-                  className="btn-primary"
-                  style={{ padding: '0.88rem', fontSize: '0.92rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem' }}
-                >
-                  <Lock size={15} />
-                  <span>Checkout</span>
-                </button>
+                <form onSubmit={handleCheckout} style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+                  <div
+                    style={{
+                      padding: '0.85rem',
+                      borderRadius: '0.85rem',
+                      border: '2px solid var(--border)',
+                      backgroundColor: 'var(--surface-muted)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.55rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.78rem', fontWeight: 800 }}>
+                      <MapPin size={14} />
+                      <span>US SHIPPING DETAILS (REQUIRED BEFORE PAYMENT)</span>
+                    </div>
+
+                    <input
+                      type="text"
+                      required
+                      value={shipping.full_name}
+                      onChange={(e) => setShipping((p) => ({ ...p, full_name: e.target.value }))}
+                      placeholder="Full Name *"
+                      aria-label="Recipient full name"
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '0.55rem 0.7rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', fontSize: '0.82rem' }}
+                    />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+                      <input
+                        type="email"
+                        required
+                        value={shipping.email}
+                        onChange={(e) => setShipping((p) => ({ ...p, email: e.target.value }))}
+                        placeholder="Email for Receipt *"
+                        aria-label="Shipping receipt email"
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '0.55rem 0.7rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', fontSize: '0.82rem' }}
+                      />
+                      <input
+                        type="tel"
+                        required
+                        value={shipping.phone}
+                        onChange={(e) => setShipping((p) => ({ ...p, phone: e.target.value }))}
+                        placeholder="Phone (10 digits) *"
+                        aria-label="Shipping phone number"
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '0.55rem 0.7rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', fontSize: '0.82rem' }}
+                      />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.45rem' }}>
+                      <input
+                        type="text"
+                        required
+                        value={shipping.street}
+                        onChange={(e) => setShipping((p) => ({ ...p, street: e.target.value }))}
+                        placeholder="Street Address *"
+                        aria-label="Street address"
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '0.55rem 0.7rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', fontSize: '0.82rem' }}
+                      />
+                      <input
+                        type="text"
+                        value={shipping.apt}
+                        onChange={(e) => setShipping((p) => ({ ...p, apt: e.target.value }))}
+                        placeholder="Apt / Unit"
+                        aria-label="Apartment or unit"
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '0.55rem 0.7rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', fontSize: '0.82rem' }}
+                      />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr 1.2fr', gap: '0.45rem' }}>
+                      <input
+                        type="text"
+                        required
+                        value={shipping.city}
+                        onChange={(e) => setShipping((p) => ({ ...p, city: e.target.value }))}
+                        placeholder="City *"
+                        aria-label="City"
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '0.55rem 0.7rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', fontSize: '0.82rem' }}
+                      />
+                      <select
+                        required
+                        value={shipping.state}
+                        onChange={(e) => setShipping((p) => ({ ...p, state: e.target.value }))}
+                        aria-label="US State"
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '0.55rem 0.45rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', fontSize: '0.82rem' }}
+                      >
+                        {KC_US_STATES.map((st) => (
+                          <option key={st} value={st}>
+                            {st}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        required
+                        value={shipping.zip}
+                        onChange={(e) => setShipping((p) => ({ ...p, zip: e.target.value }))}
+                        placeholder="ZIP *"
+                        aria-label="ZIP code"
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '0.55rem 0.7rem', borderRadius: '0.6rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text)', fontSize: '0.82rem' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                    Orders confirm in Order History and dispatch to fulfillment only after Stripe payment succeeds.
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={checkoutBusy}
+                    className="btn-primary"
+                    style={{ padding: '0.88rem', fontSize: '0.92rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem' }}
+                  >
+                    <Lock size={15} />
+                    <span>{checkoutBusy ? 'Opening Stripe Checkout...' : 'Pay Securely with Stripe'}</span>
+                  </button>
+                </form>
 
                 {checkoutStatus && (
                   <div style={{ padding: '0.75rem', borderRadius: '0.75rem', border: '1.5px solid var(--border)', backgroundColor: 'var(--accent-soft)', color: 'var(--text)', fontSize: '0.8rem', fontWeight: 700 }}>
