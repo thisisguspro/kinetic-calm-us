@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..');
 const CATALOG_PATH = path.join(ROOT_DIR, 'shared', 'catalog.json');
-const DATA_DIR = path.join(ROOT_DIR, 'data');
+export const DATA_DIR = process.env.DATA_DIR || path.join(ROOT_DIR, 'data');
 const STORE_PATH = path.join(DATA_DIR, 'kinetic_calm_store.json');
 
 export const MIN_NET_MARGIN_PCT = 20.0;

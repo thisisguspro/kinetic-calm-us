@@ -387,3 +387,86 @@ input:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* QUIET-LUXURY DRAWERS, DECLUTTERED CARDS, CONCIERGE & PRINT RECEIPT */
+.product-card { transition: transform 0.24s ease, box-shadow 0.24s ease; }
+.product-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08); }
+.card-wish-btn {
+  position: absolute; top: 10px; right: 10px; z-index: 4;
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid rgba(20, 17, 18, 0.16); background: rgba(255, 255, 255, 0.94);
+  color: var(--ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.card-wish-btn:hover, .card-wish-btn.active { background: var(--ruby, var(--accent)); color: #ffffff; border-color: var(--ruby, var(--accent)); }
+.card-detail-link { background: none; border: none; padding: 0; color: inherit; text-align: left; cursor: pointer; width: 100%; font-family: inherit; }
+.saved-cart-banner {
+  background: var(--alabaster-warm, var(--surface-muted)); border-bottom: 1px solid rgba(20, 17, 18, 0.14);
+  padding: 9px 22px; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12.5px; flex-wrap: wrap;
+}
+.lux-drawer-backdrop, .lux-modal-backdrop {
+  position: fixed; inset: 0; z-index: 9998; background: rgba(15, 17, 21, 0.66);
+  backdrop-filter: blur(4px); display: flex; justify-content: flex-end;
+}
+.lux-modal-backdrop { justify-content: center; align-items: center; padding: 16px; }
+.lux-drawer-panel {
+  width: min(560px, 100vw); height: 100%; background: var(--white, var(--surface));
+  color: var(--ink, var(--text)); border-left: 1.5px solid var(--ink, var(--border));
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.lux-modal-card {
+  width: min(740px, 100%); max-height: 90vh; background: var(--white, var(--surface));
+  color: var(--ink, var(--text)); border: 1.5px solid var(--ink, var(--border));
+  display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+}
+.lux-drawer-head, .lux-modal-head {
+  padding: 18px 22px; border-bottom: 1px solid rgba(20, 17, 18, 0.14);
+  background: var(--alabaster, var(--surface-muted)); display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+}
+.lux-drawer-body, .lux-modal-body { padding: 18px 22px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 15px; }
+.lux-drawer-foot { padding: 14px 22px; border-top: 1px solid rgba(20, 17, 18, 0.14); background: var(--alabaster, var(--surface-muted)); }
+.lux-drawer-hero { width: 100%; aspect-ratio: 4 / 3; background: var(--alabaster, var(--surface-muted)); border: 1px solid rgba(20, 17, 18, 0.1); overflow: hidden; }
+.lux-drawer-hero img { width: 100%; height: 100%; object-fit: cover; }
+.lux-eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ruby, var(--accent)); }
+.lux-drawer-title { font-size: 24px; line-height: 1.15; margin-top: 4px; }
+.lux-icon-btn { width: 34px; height: 34px; border: 1px solid rgba(20, 17, 18, 0.22); background: var(--white, var(--surface)); color: var(--ink, var(--text)); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.lux-icon-btn.active { background: var(--ruby, var(--accent)); color: #fff; border-color: var(--ruby, var(--accent)); }
+.lux-price-panel { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid rgba(20, 17, 18, 0.12); }
+.lux-main-price { font-size: 28px; font-weight: 700; color: var(--ruby, var(--accent)); }
+.lux-strike { font-size: 13px; text-decoration: line-through; color: var(--muted, var(--text-muted)); margin-right: 8px; }
+.lux-badge-clean { font-size: 10.5px; font-weight: 700; padding: 5px 10px; background: var(--alabaster, var(--surface-muted)); border: 1px solid var(--vermeil, var(--border)); }
+.lux-lead { font-size: 13.5px; line-height: 1.6; }
+.lux-info-card { background: var(--alabaster, var(--surface-muted)); border: 1px solid rgba(20, 17, 18, 0.14); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; line-height: 1.45; }
+.lux-info-row { display: flex; gap: 8px; align-items: flex-start; }
+.lux-section-box { border-top: 1px solid rgba(20, 17, 18, 0.12); padding-top: 12px; }
+.lux-section-kicker { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: var(--ruby, var(--accent)); display: flex; align-items: center; gap: 6px; }
+.lux-acc-item { border-bottom: 1px solid rgba(20, 17, 18, 0.1); }
+.lux-acc-btn { width: 100%; background: none; border: none; padding: 10px 0; display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; font-weight: 700; color: inherit; cursor: pointer; text-align: left; }
+.lux-acc-body { font-size: 12px; color: var(--muted, var(--text-muted)); padding-bottom: 10px; line-height: 1.5; }
+.lux-inline-form { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.lux-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.lux-label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; color: var(--muted, var(--text-muted)); }
+.lux-input { width: 100%; padding: 9px 11px; border: 1px solid rgba(20, 17, 18, 0.25); background: var(--white, var(--surface)); color: var(--ink, var(--text)); font-size: 12.5px; font-family: inherit; }
+.lux-hint { font-size: 11.5px; color: var(--muted, var(--text-muted)); margin-top: 6px; }
+.lux-review-card { padding: 10px; background: var(--alabaster, var(--surface-muted)); border: 1px solid rgba(20, 17, 18, 0.14); }
+.lux-modal-tabs { display: flex; gap: 6px; padding: 10px 22px; border-bottom: 1px solid rgba(20, 17, 18, 0.12); background: var(--alabaster-warm, var(--surface-muted)); flex-wrap: wrap; }
+.lux-tab-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font-size: 11px; font-weight: 700; border: 1px solid rgba(20, 17, 18, 0.22); background: var(--white, var(--surface)); color: var(--ink, var(--text)); cursor: pointer; }
+.lux-tab-btn.active { background: var(--ruby, var(--accent)); color: #fff; border-color: var(--ruby, var(--accent)); }
+.lux-result-box { padding: 12px; background: var(--alabaster, var(--surface-muted)); border: 1px solid rgba(20, 17, 18, 0.16); margin-top: 10px; }
+.lux-timeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 12px; }
+.lux-tl-step { display: flex; gap: 8px; align-items: flex-start; opacity: 0.5; }
+.lux-tl-step.done { opacity: 1; }
+.lux-tl-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted, #666); margin-top: 4px; flex-shrink: 0; }
+.lux-tl-step.done .lux-tl-dot { background: #15803d; }
+.lux-alert-err { margin-top: 8px; padding: 10px 12px; background: #fef2f2; border: 1px solid #991b1b; color: #7f1d1d; font-size: 12px; display: flex; gap: 8px; align-items: center; }
+.lux-alert-ok { margin-top: 8px; padding: 10px 12px; background: #f0fdf4; border: 1px solid #15803d; color: #14532d; font-size: 12px; display: flex; gap: 8px; align-items: center; }
+.lux-concierge-wrap { position: fixed; left: 18px; bottom: 18px; z-index: 90; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.lux-concierge-fab { display: inline-flex; align-items: center; gap: 7px; padding: 10px 15px; border-radius: 999px; background: var(--ink, #141417); color: #faf6f0; border: 1.5px solid var(--vermeil, #b88a44); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22); }
+.lux-concierge-menu { width: 240px; background: var(--white, var(--surface)); color: var(--ink, var(--text)); border: 1.5px solid var(--ink, var(--border)); padding: 12px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.2); }
+.lux-concierge-item { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--alabaster, var(--surface-muted)); border: 1px solid transparent; font-size: 12px; font-weight: 600; color: inherit; text-align: left; cursor: pointer; }
+.lux-concierge-item:hover { border-color: var(--ruby, var(--accent)); color: var(--ruby, var(--accent)); }
+@media print {
+  body * { visibility: hidden; }
+  .lux-print-sheet, .lux-print-sheet * { visibility: visible; }
+  .lux-print-sheet { position: fixed; left: 0; top: 0; width: 100%; border: none; box-shadow: none; }
+  .no-print { display: none !important; }
+}

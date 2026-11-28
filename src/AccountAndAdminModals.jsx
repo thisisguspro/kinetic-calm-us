@@ -1,3 +1,4 @@
+import { AdminStoreOpsTab } from './AdminStoreOpsTab.jsx';
 import React, { useEffect, useState } from 'react';
 import {
   X,
@@ -68,7 +69,7 @@ export function GoogleSignInButton({ referralCode = '', asAdmin = false, label =
 /* ==========================================================================
    1. CUSTOMER GOOGLE ACCOUNT, ORDER HISTORY & CALM CLUB REFERRAL DRAWER
    ========================================================================== */
-export function CustomerAccountModal({
+export function CustomerAccountModal({ onOpenReceipt, onOpenRma,
   open,
   onClose,
   authState,
@@ -291,6 +292,18 @@ export function CustomerAccountModal({
                               Supplier fulfillment request dispatched after payment
                             </div>
                           )}
+                          <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+                            {onOpenReceipt && (
+                              <button type="button" className="btn-ghost" style={{ padding: '0.3rem 0.65rem', fontSize: '0.72rem' }} onClick={() => onOpenReceipt(ord.id, user?.email || '')}>
+                                Receipt / Gift Slip
+                              </button>
+                            )}
+                            {onOpenRma && (
+                              <button type="button" className="btn-ghost" style={{ padding: '0.3rem 0.65rem', fontSize: '0.72rem' }} onClick={() => onOpenRma(ord.id)}>
+                                Return / Cancel (RMA)
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     })
@@ -613,6 +626,7 @@ export function AdminConsoleModal({ open, onClose, authState, onCatalogRefresh }
                 { id: 'promos', label: 'Promotions, Bundles & Referrals', icon: <Gift size={14} /> },
                 { id: 'catalog', label: 'Catalog, Direct vs Affiliate & Margins', icon: <Sliders size={14} /> },
                 { id: 'orders', label: `Orders & Waitlist (${data?.orders?.length || 0})`, icon: <Package size={14} /> },
+                { id: 'store_ops', label: 'RMAs, Tickets & Emails', icon: <Package size={14} /> },
                 { id: 'admins', label: 'Authorized Google Admins', icon: <Users size={14} /> },
               ].map((t) => (
                 <button
@@ -831,6 +845,8 @@ export function AdminConsoleModal({ open, onClose, authState, onCatalogRefresh }
                 )}
               </div>
             )}
+
+            {tab === 'store_ops' && <AdminStoreOpsTab />}
 
             {/* TAB 4: CO-ADMINS */}
             {tab === 'admins' && data && (

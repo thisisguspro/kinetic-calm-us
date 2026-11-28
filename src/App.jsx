@@ -130,6 +130,57 @@ export default function App() {
     }
   });
   const [bagOpen, setBagOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState('track');
+  const [helpOrderId, setHelpOrderId] = useState('');
+  const [receiptModal, setReceiptModal] = useState({ open: false, orderId: '', email: '' });
+  const [showWishlistOnly, setShowWishlistOnly] = useState(false);
+  const [wishlist, setWishlist] = useState(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem('kc_wishlist_v1') || '[]');
+      return Array.isArray(s) ? s : [];
+    } catch { return []; }
+  });
+  const [isGift, setIsGift] = useState(false);
+  const [giftNote, setGiftNote] = useState('');
+  const [hidePriceOnSlip, setHidePriceOnSlip] = useState(false);
+  const [saveBagEmail, setSaveBagEmail] = useState('');
+  const [saveBagMsg, setSaveBagMsg] = useState('');
+  const [faqBagOpen, setFaqBagOpen] = useState(false);
+
+  useEffect(() => {
+    try { localStorage.setItem('kc_wishlist_v1', JSON.stringify(wishlist)); } catch {}
+  }, [wishlist]);
+
+  useEffect(() => {
+    if (!authState?.authenticated) return;
+    fetch('/api/wishlist')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.ok && Array.isArray(d.product_ids) && d.product_ids.length) {
+          setWishlist((prev) => Array.from(new Set([...prev, ...d.product_ids])));
+        }
+      })
+      .catch(() => {});
+  }, [authState?.authenticated]);
+
+  const toggleWishlistItem = (productId) => {
+    setWishlist((prev) => (prev.includes(productId) ? prev.filter((x) => x !== productId) : [...prev, productId]));
+    if (authState?.authenticated) {
+      fetch('/api/wishlist/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: productId }),
+      }).catch(() => {});
+    }
+  };
+
+  const openHelpCenter = (t = 'track', ordId = '') => {
+    setHelpTab(t);
+    setHelpOrderId(ordId || '');
+    setHelpOpen(true);
+  };
   const [promoCode, setPromoCode] = useState('');
   const [vaultDiscountPct, setVaultDiscountPct] = useState(0);
   const [quote, setQuote] = useState(null);
@@ -454,9 +505,12 @@ export default function App() {
         const sp = classifySoundProfile(item);
         if (sp.kind !== soundFilter) return false;
       }
+      if (showWishlistOnly && !wishlist.includes(item.id)) return false;
+      const sq = searchQuery.trim().toLowerCase();
+      if (sq && !`${item.name} ${item.subtitle || ''} ${item.collection_label || ''}`.toLowerCase().includes(sq)) return false;
       return true;
     });
-  }, [catalog, activeCollection, soundFilter, gusproEligibleOnly]);
+  }, [catalog, activeCollection, soundFilter, gusproEligibleOnly, showWishlistOnly, wishlist, searchQuery]);
 
   const heroItems = useMemo(() => {
     if (!catalog.length) return [];
@@ -495,6 +549,7 @@ export default function App() {
           vault_discount_pct: vaultDiscountPct,
           email: shipping.email.trim(),
           referral_code: referralCodeFromUrl || undefined,
+          gift_options: { is_gift: Boolean(isGift || giftNote.trim()), gift_note: giftNote.trim(), hide_price_on_slip: Boolean(hidePriceOnSlip) },
           shipping_address: {
             full_name: shipping.full_name.trim(),
             email: shipping.email.trim(),
@@ -538,8 +593,11 @@ export default function App() {
     }
   };
 
-  const renderProductCard = (item, featuredWide = false, fullSpecHeader = false) => {
-    const sound = classifySoundProfile(item);
+  const renderProductCard = (item) => {
+    const qtyInBag = bag.find((b) => b.id === item.id)?.quantity || 0;
+    const isPartner = item.track === 'TRACK_B_PARTNER' || item.fulfillment_track === 'TRACK_B_PARTNER';
+    const actPrice = item.is_on_promotion && item.sale_price_usd ? Number(item.sale_price_usd) : Number(item.price_usd || 0);
+    const saved = wishlist.includes(item.id);
     return (
       <article
         key={item.id}
@@ -547,13 +605,11 @@ export default function App() {
         className="surface-card product-card"
         style={{
           padding: '1rem',
-          gridColumn: featuredWide ? 'span 2' : undefined,
-          display: featuredWide ? 'grid' : 'flex',
-          gridTemplateColumns: featuredWide ? 'repeat(auto-fit, minmax(220px, 1fr))' : undefined,
-          flexDirection: featuredWide ? undefined : 'column',
+          display: 'flex',
+          flexDirection: 'column',
           justifyContent: 'space-between',
-          gap: featuredWide ? '1.25rem' : '0.8rem',
-          alignItems: featuredWide ? 'center' : 'stretch',
+          gap: '0.8rem',
+          cursor: 'pointer',
         }}
       >
         <div
@@ -571,108 +627,58 @@ export default function App() {
             alt={item.name}
             loading="lazy"
             className="product-img-zoom"
-            style={{
-              position: 'relative',
-              zIndex: 1,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              objectPosition: 'center bottom',
-              backgroundColor: 'transparent',
-              padding: 0,
-              filter: 'none',
-              display: 'block',
-            }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center bottom', display: 'block' }}
           />
-          <span
-            className="font-neo"
-            style={{
-              position: 'absolute',
-              top: '0.6rem',
-              left: '0.6rem',
-              padding: '0.2rem 0.6rem',
-              borderRadius: '999px',
-              backgroundColor: '#FFF3C4',
-              color: '#141417',
-              border: '1.8px solid #141417',
-              fontSize: '0.69rem',
-              fontWeight: 800,
-              boxShadow: '2px 2px 0px #141417',
-            }}
+          <button
+            type="button"
+            className={`card-wish-btn ${saved ? 'active' : ''}`}
+            aria-label={saved ? `Remove ${item.name} from saved` : `Save ${item.name}`}
+            onClick={(e) => { e.stopPropagation(); toggleWishlistItem(item.id); }}
           >
-            {item.vibe_chip}
-          </span>
+            <Heart size={14} fill={saved ? 'currentColor' : 'none'} />
+          </button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem', flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.65rem', flex: 1 }}>
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
-              <h3 className="font-display" style={{ margin: 0, fontSize: featuredWide ? '1.35rem' : '1.08rem', fontWeight: 800, lineHeight: 1.2 }}>
-                {item.name}
-              </h3>
-              <span
-                className="tabular-nums font-neo"
-                style={{
-                  fontWeight: 800,
-                  fontSize: featuredWide ? '1.25rem' : '1.08rem',
-                  flexShrink: 0,
-                  padding: '0.1rem 0.48rem',
-                  borderRadius: '0.5rem',
-                  backgroundColor: item.is_on_promotion ? 'var(--surface-blush)' : 'var(--surface-muted)',
-                  color: item.is_on_promotion ? '#9F1239' : undefined,
-                  border: '1.5px solid var(--border)',
-                }}
-              >
-                {item.is_on_promotion && item.sale_price_usd ? (
-                  <>
-                    <span style={{ textDecoration: 'line-through', opacity: 0.55, marginRight: '0.28rem', fontSize: '0.84em' }}>
-                      ${Number(item.price_usd).toFixed(2)}
-                    </span>
-                    ${Number(item.sale_price_usd).toFixed(2)}
-                  </>
-                ) : (
-                  `$${Number(item.price_usd).toFixed(2)}`
-                )}
-              </span>
+            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--mint-strong)', textTransform: 'uppercase' }}>
+              {item.collection_label || 'Kinetic Calm Studio'}
             </div>
-            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.22rem' }}>
-              {featuredWide ? item.short_tagline : item.subtitle}
-            </div>
-
-            {fullSpecHeader && (
-              <div
-                style={{
-                  marginTop: '0.6rem',
-                  padding: '0.5rem 0.65rem',
-                  borderRadius: '0.75rem',
-                  backgroundColor: 'var(--surface-muted)',
-                  border: '1.5px solid var(--border-subtle)',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '0.35rem',
-                  fontSize: '0.72rem',
-                }}
-              >
-                <div><strong>Feel:</strong> {item.squish_label}</div>
-                <div><strong>Audio:</strong> {sound.shortLabel}</div>
-              </div>
-            )}
+            <h3 className="font-display" style={{ margin: '0.2rem 0 0', fontSize: '1.08rem', fontWeight: 800, lineHeight: 1.2 }}>
+              {item.name}
+            </h3>
           </div>
 
-          <div
-            style={{
-              paddingTop: '0.68rem',
-              borderTop: '1.5px dashed var(--border-subtle)',
-              display: 'flex',
-              flexWrap: 'wrap',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '0.55rem',
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: '1.5px dashed var(--border-subtle)', paddingTop: '0.6rem' }}>
+            <span className="tabular-nums font-neo" style={{ fontWeight: 800, fontSize: '1.12rem' }}>
+              {item.is_on_promotion && item.sale_price_usd && (
+                <span style={{ textDecoration: 'line-through', opacity: 0.55, marginRight: '0.35rem', fontSize: '0.82em' }}>
+                  ${Number(item.price_usd).toFixed(2)}
+                </span>
+              )}
+              ${actPrice.toFixed(2)}
+            </span>
+            <span style={{ fontSize: '0.73rem', fontWeight: 700, textDecoration: 'underline', color: 'var(--text-muted)' }}>
+              Details
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="btn-primary"
+            style={{ width: '100%', padding: '0.6rem 0.9rem', fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isPartner) {
+                setSelectedProduct(item);
+              } else {
+                addToBag(item);
+              }
             }}
           >
-            <SensoryStatCluster item={item} emotePack={emotePack} compact={!featuredWide} />
-            <GroceryQtyStepper item={item} bag={bag} onAdd={addToBag} onUpdateQty={updateBagQty} />
-          </div>
+            <ShoppingBag size={14} />
+            <span>{isPartner ? 'View Details' : qtyInBag > 0 ? `In Bag (${qtyInBag}) • Add +1` : 'Add to Cart'}</span>
+          </button>
         </div>
       </article>
     );
@@ -921,6 +927,26 @@ export default function App() {
             )}
             <button
               type="button"
+              onClick={() => setShowWishlistOnly((v) => !v)}
+              className={showWishlistOnly ? 'btn-primary' : 'btn-ghost'}
+              style={{ padding: '0.46rem 0.72rem', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '0.32rem' }}
+              title="Saved items"
+            >
+              <Heart size={14} fill={showWishlistOnly ? 'currentColor' : 'none'} />
+              <span>Saved ({wishlist.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => openHelpCenter('track')}
+              className="btn-ghost"
+              style={{ padding: '0.46rem 0.78rem', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '0.32rem' }}
+              title="Track Order, Returns, FAQ & Support"
+            >
+              <HelpCircle size={14} />
+              <span>Track &amp; Help</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setAccountOpen(true)}
               className="btn-ghost"
               style={{ padding: '0.46rem 0.82rem', fontSize: '0.79rem', display: 'inline-flex', alignItems: 'center', gap: '0.38rem' }}
@@ -967,6 +993,14 @@ export default function App() {
       </header>
 
       <main>
+        {bagCount > 0 && !bagOpen && (
+          <div className="saved-cart-banner" role="region" aria-label="Saved bag reminder">
+            <span><strong>Your sensory bag is saved ({bagCount} {bagCount === 1 ? 'item' : 'items'}):</strong> free US shipping at $65+.</span>
+            <button type="button" className="btn-ghost" style={{ padding: '0.32rem 0.8rem', fontSize: '0.76rem' }} onClick={() => setBagOpen(true)}>
+              Open Bag &amp; Checkout
+            </button>
+          </div>
+        )}
         {/* ===================================================================
             PINNED 4-ITEM SCROLL-DRIVEN TOP SHOWCASE CAROUSEL (280vh Sticky Stage)
             Scrolls smoothly through ALL 4 signature items before releasing!
@@ -1364,6 +1398,17 @@ export default function App() {
                         {sf.label}
                       </button>
                     ))}
+                    <div style={{ position: 'relative' }}>
+                      <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                      <input
+                        type="search"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search tactile tools..."
+                        aria-label="Search tactile tools"
+                        style={{ padding: '0.34rem 0.7rem 0.34rem 28px', borderRadius: '0.75rem', border: '1.5px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: '0.74rem' }}
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={() => setGusproEligibleOnly((prev) => !prev)}
@@ -1575,110 +1620,45 @@ export default function App() {
         </div>
       </footer>
 
-      {/* PRODUCT DETAIL MODAL */}
-      {selectedProduct && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={selectedProduct.name}
-          onClick={() => setSelectedProduct(null)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 820,
-            backgroundColor: 'rgba(12, 16, 20, 0.58)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1rem',
-          }}
-        >
-          <div
-            className="surface-card"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: '780px',
-              width: '100%',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              padding: 'clamp(1.25rem, 3vw, 2rem)',
-              position: 'relative',
-              backgroundColor: 'var(--surface)',
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setSelectedProduct(null)}
-              aria-label="Close product details"
-              className="btn-ghost"
-              style={{ position: 'absolute', top: '1rem', right: '1rem', width: '36px', height: '36px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <X size={18} />
-            </button>
+      <ProductDetailDrawer
+        item={selectedProduct}
+        isOpen={Boolean(selectedProduct)}
+        onClose={() => setSelectedProduct(null)}
+        bag={bag}
+        onAdd={addToBag}
+        onUpdateQty={updateBagQty}
+        wishlist={wishlist}
+        onToggleWishlist={toggleWishlistItem}
+        authState={authState}
+        emotePack={emotePack}
+        onOpenHelpTab={(t) => openHelpCenter(t)}
+      />
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.65rem', alignItems: 'start' }}>
-              <div style={{ borderRadius: '1.15rem', border: '2px solid var(--border)', overflow: 'hidden', background: '#efe8de', padding: 0, aspectRatio: '1 / 1', position: 'relative' }}>
-                <img src={selectedProduct.pedestal_transparent_url || selectedProduct.image_url} alt={selectedProduct.name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center bottom', padding: 0, filter: 'none', display: 'block' }} />
-              </div>
+      <StoreHelpAndTrackModal
+        isOpen={helpOpen}
+        initialTab={helpTab}
+        initialOrderId={helpOrderId}
+        onClose={() => setHelpOpen(false)}
+        authState={authState}
+        onOpenReceipt={(ordId, eml) => {
+          setHelpOpen(false);
+          setReceiptModal({ open: true, orderId: ordId, email: eml });
+        }}
+      />
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-                <div>
-                  <span className="font-neo" style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--accent)', textTransform: 'uppercase' }}>
-                    {selectedProduct.collection_label} • {selectedProduct.age_grade}
-                  </span>
-                  <h2 className="font-display" style={{ margin: '0.22rem 0', fontSize: '1.65rem', fontWeight: 800, lineHeight: 1.15 }}>
-                    {selectedProduct.name}
-                  </h2>
-                  <div className="tabular-nums font-neo" style={{ fontSize: '1.4rem', fontWeight: 800 }}>
-                    {selectedProduct.is_on_promotion && selectedProduct.sale_price_usd ? (
-                      <>
-                        <span style={{ textDecoration: 'line-through', opacity: 0.55, marginRight: '0.45rem', fontSize: '0.82em' }}>
-                          ${Number(selectedProduct.price_usd).toFixed(2)}
-                        </span>
-                        ${Number(selectedProduct.sale_price_usd).toFixed(2)}
-                      </>
-                    ) : (
-                      `$${Number(selectedProduct.price_usd).toFixed(2)}`
-                    )}
-                  </div>
-                </div>
+      <PrintableInvoiceModal
+        isOpen={receiptModal.open}
+        orderId={receiptModal.orderId}
+        email={receiptModal.email}
+        onClose={() => setReceiptModal({ open: false, orderId: '', email: '' })}
+      />
 
-                <div style={{ padding: '0.85rem 1rem', borderRadius: '0.95rem', border: '2px solid var(--border)', backgroundColor: 'var(--surface-muted)', display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                  <SensoryStatCluster item={selectedProduct} emotePack={emotePack} />
-                  <div style={{ fontSize: '0.8rem' }}>
-                    <strong>Sound Profile:</strong> {selectedProduct.sound_db}
-                  </div>
-                  <div style={{ fontSize: '0.8rem' }}>
-                    <strong>Texture &amp; Action:</strong> {selectedProduct.texture_profile}
-                  </div>
-                </div>
+      <StoreConciergeWidget
+        onOpenHelpTab={(t) => openHelpCenter(t)}
+        wishlistCount={wishlist.length}
+        onToggleWishlistFilter={() => setShowWishlistOnly((v) => !v)}
+      />
 
-                <p style={{ margin: 0, fontSize: '0.92rem', color: 'var(--text-muted)', lineHeight: 1.58 }}>
-                  {selectedProduct.full_story || selectedProduct.short_tagline}
-                </p>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  <GroceryQtyStepper
-                    item={selectedProduct}
-                    bag={bag}
-                    onAdd={addToBag}
-                    onUpdateQty={updateBagQty}
-                    size="lg"
-                  />
-                </div>
-
-                <div style={{ paddingTop: '0.65rem', borderTop: '1.5px dashed var(--border-subtle)', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                  <div><strong>Materials:</strong> {selectedProduct.material_spec}</div>
-                  <div><strong>Care &amp; Safety:</strong> {selectedProduct.cpsia_astm_note} {selectedProduct.fda_wellness_note}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SLIDE-OVER BAG DRAWER */}
       {bagOpen && (
         <div
           role="dialog"
@@ -1890,6 +1870,52 @@ export default function App() {
                     </div>
                   </div>
 
+                  <div style={{ padding: '0.75rem', borderRadius: '0.85rem', border: '1.5px solid var(--border)', background: 'var(--surface-muted)', display: 'flex', flexDirection: 'column', gap: '0.45rem', fontSize: '0.78rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 700, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={isGift} onChange={(e) => setIsGift(e.target.checked)} />
+                      <span>Add Gift Note &amp; Optional Price-Hidden Gift Slip</span>
+                    </label>
+                    {isGift && (
+                      <>
+                        <textarea rows={2} value={giftNote} onChange={(e) => setGiftNote(e.target.value)} placeholder="Gift message (optional)..." style={{ width: '100%', padding: '0.45rem', borderRadius: '0.5rem', border: '1.5px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: '0.78rem' }} />
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={hidePriceOnSlip} onChange={(e) => setHidePriceOnSlip(e.target.checked)} />
+                          <span>Hide prices on gift packing slip</span>
+                        </label>
+                      </>
+                    )}
+                    <div style={{ display: 'flex', gap: '0.4rem', borderTop: '1px dashed var(--border-subtle)', paddingTop: '0.45rem' }}>
+                      <input type="email" value={saveBagEmail} onChange={(e) => setSaveBagEmail(e.target.value)} placeholder="Email me this saved bag..." style={{ flex: 1, padding: '0.4rem 0.6rem', borderRadius: '0.55rem', border: '1.5px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: '0.76rem' }} />
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        style={{ padding: '0.35rem 0.7rem', fontSize: '0.72rem' }}
+                        onClick={async () => {
+                          setSaveBagMsg('Sending...');
+                          const r = await fetch('/api/cart/email-reminder', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email: saveBagEmail, items: bag.map((b) => ({ product_id: b.id, quantity: b.quantity })) }),
+                          });
+                          const d = await r.json().catch(() => ({}));
+                          setSaveBagMsg(r.ok ? 'Saved bag reminder sent/logged!' : d.error || 'Enter a valid email.');
+                        }}
+                      >
+                        Email Bag
+                      </button>
+                    </div>
+                    {saveBagMsg && <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--mint-strong)' }}>{saveBagMsg}</div>}
+                    <button type="button" onClick={() => setFaqBagOpen((v) => !v)} style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', fontSize: '0.73rem', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', color: 'var(--text)' }}>
+                      {faqBagOpen ? 'Hide checkout FAQ' : 'Shipping, pre-ship cancel & 30-day return FAQ'}
+                    </button>
+                    {faqBagOpen && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                        • Orders confirm strictly after Stripe payment succeeds.<br />
+                        • Pre-ship orders cancel directly for an instant refund.<br />
+                        • Backed by our 30-day US FTC guarantee &amp; CPSIA safety.
+                      </div>
+                    )}
+                  </div>
                   <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
                     Orders confirm in Order History and dispatch to fulfillment only after Stripe payment succeeds.
                   </div>
@@ -1917,6 +1943,8 @@ export default function App() {
       )}
 
       <CustomerAccountModal
+        onOpenReceipt={(ordId, eml) => setReceiptModal({ open: true, orderId: ordId, email: eml })}
+        onOpenRma={(ordId) => { setAccountOpen(false); openHelpCenter('rma', ordId); }}
         open={accountOpen}
         onClose={() => setAccountOpen(false)}
         authState={authState}

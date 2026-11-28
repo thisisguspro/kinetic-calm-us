@@ -15,6 +15,7 @@ import {
   computeServerQuote,
   computeSkuMargins,
   decorateUserWithRoles,
+  DATA_DIR,
   findReferralOwnerByCode,
   getUserById,
   isAdminEmail,
@@ -27,6 +28,8 @@ import {
 } from './adminStore.js';
 
 import { createLivePriceSync } from '../shared/livePriceSync.js';
+import { createEmailService } from './emailService.js';
+import { registerStoreOpsRoutes } from './storeOpsModule.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..');
@@ -52,6 +55,7 @@ const DIST_DIR = path.join(ROOT_DIR, 'dist');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const PORT = Number(process.env.PORT || 3007);
 const IS_PROD = process.env.NODE_ENV === 'production';
+const emailService = createEmailService({ rootDir: ROOT_DIR, dataDir: DATA_DIR });
 const BIND_HOST = IS_PROD ? '0.0.0.0' : '127.0.0.1';
 
 const isRealCred = (val) =>
@@ -596,23 +600,79 @@ app.post('/api/admin/sku-override', requireAdminAuth, (req, res) => {
   return res.json({ ok: true, sku: { ...candidate, margins: marginCheck } });
 });
 
-app.post('/api/admin/orders/:orderId/status', requireAdminAuth, (req, res) => {
-  const { orderId } = req.params;
-  const { status, tracking_number, carrier } = req.body || {};
-  const store = readStore();
-  const idx = store.orders.findIndex((o) => o.id === orderId);
-  if (idx < 0) {
-    return res.status(404).json({ error: 'Order not found.' });
+async function refundKcOrderWithStripe(store, orderObj, nowIso) {
+  const stripeKey = isRealCred(process.env.STRIPE_SECRET_KEY) ? process.env.STRIPE_SECRET_KEY.trim() : '';
+  let stripeRefundId = orderObj.stripe_refund_id || null;
+  if (stripeKey && orderObj.stripe_payment_intent_id && orderObj.status !== 'REFUNDED') {
+    const rp = new URLSearchParams();
+    rp.set('payment_intent', orderObj.stripe_payment_intent_id);
+    rp.set('reason', 'requested_by_customer');
+    const sRef = await fetch('https://api.stripe.com/v1/refunds', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${stripeKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Idempotency-Key': `kc-ref-${orderObj.id}`,
+      },
+      body: rp.toString(),
+    });
+    if (!sRef.ok) {
+      const errJ = await sRef.json().catch(() => ({}));
+      return { ok: false, error: errJ?.error?.message || 'Stripe refund failed.' };
+    }
+    const sJson = await sRef.json().catch(() => ({}));
+    stripeRefundId = sJson?.id || stripeRefundId;
   }
-  store.orders[idx] = {
-    ...store.orders[idx],
-    status: String(status || store.orders[idx].status || 'PROCESSING').slice(0, 32),
-    tracking_number: tracking_number !== undefined ? String(tracking_number).trim().slice(0, 64) : store.orders[idx].tracking_number,
-    carrier: carrier !== undefined ? String(carrier).trim().slice(0, 32) : store.orders[idx].carrier,
-    updated_at: new Date().toISOString(),
-  };
-  writeStore(store);
-  return res.json({ ok: true, order: store.orders[idx] });
+  orderObj.status = 'REFUNDED';
+  orderObj.refunded_at = nowIso;
+  orderObj.stripe_refund_id = stripeRefundId;
+  orderObj.updated_at = nowIso;
+  const custEmail = normalizeEmail(orderObj.customer_email);
+  if (custEmail && store.customers?.[custEmail]) {
+    const u = store.users?.[store.customers[custEmail].user_id];
+    const usedPct = Math.max(0, Math.floor(Number(orderObj.vault_applied_pct || 0)));
+    if (u && usedPct > 0 && !orderObj.vault_restored) {
+      u.unlocked_vault_pct = Math.min(30, Math.floor(Number(u.unlocked_vault_pct || 0)) + usedPct);
+      store.customers[custEmail].max_unlocked_pct = u.unlocked_vault_pct;
+      orderObj.vault_restored = true;
+    }
+  }
+  return { ok: true, refunded: true, stripeRefundId };
+}
+
+app.post('/api/admin/orders/:orderId/status', requireAdminAuth, async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const { status, tracking_number, carrier } = req.body || {};
+    const store = readStore();
+    const idx = store.orders.findIndex((o) => o.id === orderId);
+    if (idx < 0) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+    const nextStatus = String(status || store.orders[idx].status || 'PROCESSING').trim().toUpperCase().slice(0, 32);
+    const nowIso = new Date().toISOString();
+    if (nextStatus === 'REFUNDED') {
+      const rf = await refundKcOrderWithStripe(store, store.orders[idx], nowIso);
+      if (!rf.ok) return res.status(502).json({ error: rf.error });
+    } else {
+      store.orders[idx] = {
+        ...store.orders[idx],
+        status: nextStatus,
+        tracking_number: tracking_number !== undefined ? String(tracking_number).trim().slice(0, 64) : store.orders[idx].tracking_number,
+        carrier: carrier !== undefined ? String(carrier).trim().slice(0, 32) : store.orders[idx].carrier,
+        shipped_at: nextStatus === 'SHIPPED' ? (store.orders[idx].shipped_at || nowIso) : store.orders[idx].shipped_at,
+        delivered_at: nextStatus === 'DELIVERED' ? (store.orders[idx].delivered_at || nowIso) : store.orders[idx].delivered_at,
+        updated_at: nowIso,
+      };
+    }
+    writeStore(store);
+    if (nextStatus === 'SHIPPED' || nextStatus === 'DELIVERED') {
+      emailService.sendShippingUpdate(store.orders[idx]).catch(() => {});
+    }
+    return res.json({ ok: true, order: store.orders[idx] });
+  } catch (err) {
+    return next(err);
+  }
 });
 
 app.post('/api/admin/co-admins', requireSuperAdminAuth, (req, res) => {
@@ -893,6 +953,7 @@ function finalizePaidOrder(store, orderId, stripeSession) {
     }
   }
   store.orders[orderStoreIdx] = { ...order, updated_at: nowIso };
+  emailService.sendOrderConfirmation(store.orders[orderStoreIdx]).catch(() => {});
   return store.orders[orderStoreIdx];
 }
 
@@ -1019,6 +1080,11 @@ app.post('/api/checkout', async (req, res) => {
       free_gift_unlocked: Boolean(quote.free_gift_unlocked),
       free_gift_label: quote.free_gift_label,
       referral_code: effectiveRef || null,
+      gift_options: {
+        is_gift: Boolean(req.body?.gift_options?.is_gift || String(req.body?.gift_options?.gift_note || '').trim()),
+        gift_note: String(req.body?.gift_options?.gift_note || '').trim().slice(0, 350),
+        hide_price_on_slip: Boolean(req.body?.gift_options?.hide_price_on_slip),
+      },
       stripe_session_id: sessionData.id,
       payment_verified: false,
       created_at: new Date().toISOString(),
@@ -1159,6 +1225,91 @@ if (fs.existsSync(PUBLIC_DIR)) {
 if (fs.existsSync(DIST_DIR)) {
   app.use(express.static(DIST_DIR, { dotfiles: 'ignore', index: false }));
 }
+
+
+registerStoreOpsRoutes(app, {
+  dataDir: DATA_DIR,
+  requireAuth,
+  requireAdmin: requireAdminAuth,
+  getCatalog: () => loadCatalog(),
+  emailService,
+  getOrdersList: () => readStore().orders || [],
+  findOrderById: (orderId) => (readStore().orders || []).find((o) => o.id === orderId) || null,
+  saveOrderMutation: (orderId, mutator) => {
+    const store = readStore();
+    const o = (store.orders || []).find((x) => x.id === orderId);
+    if (!o) return null;
+    mutator(o);
+    writeStore(store);
+    return o;
+  },
+  refundOrderWithClawback: async (orderObj, nowIso) => {
+    const store = readStore();
+    const target = (store.orders || []).find((x) => x.id === orderObj.id);
+    if (!target) return { ok: false, error: 'Order not found.' };
+    const rf = await refundKcOrderWithStripe(store, target, nowIso);
+    if (!rf.ok) return rf;
+    writeStore(store);
+    return rf;
+  },
+  getOrderStatusMeta: (order) => {
+    const st = String(order.status || '').toUpperCase();
+    const isUnpaidDraft = UNPAID_STATUSES_KC.has(st);
+    const isCancelledOrRefunded = ['REFUNDED', 'CANCELLED', 'EXPIRED'].includes(st);
+    const isDelivered = Boolean(order.delivered_at) || st === 'DELIVERED';
+    const isShipped = Boolean(order.shipped_at) || Boolean(order.tracking_number) || st === 'SHIPPED' || isDelivered;
+    const isPaid = Boolean(order.payment_verified) && !isUnpaidDraft;
+    const isPreShipment = isPaid && !isShipped && !isCancelledOrRefunded;
+    const addr = order.shipping_address || {};
+    const items = (Array.isArray(order.items) ? order.items : []).map((it) => ({
+      product_id: it.id,
+      name: it.name,
+      size: it.size || '',
+      quantity: Number(it.quantity || 1),
+      unit_price: Number(it.unit_price_usd || 0),
+      line_total: Number(it.line_total_usd ?? Number(it.unit_price_usd || 0) * Number(it.quantity || 1)),
+    }));
+    return {
+      orderId: order.id,
+      status: st,
+      statusLabel: st,
+      buyerEmail: normalizeEmail(order.customer_email || addr.email || ''),
+      buyerName: addr.full_name || '',
+      isUnpaidDraft,
+      isPaid,
+      isPreShipment,
+      isShipped,
+      isDelivered,
+      isCancelledOrRefunded,
+      carrier: order.carrier || null,
+      trackingCode: order.tracking_number || null,
+      shippingCityRegion: addr.city ? `${addr.city}${addr.state ? ', ' + addr.state : ''}` : null,
+      paidAt: order.paid_at || order.payment_verified_at || null,
+      fulfillmentRequestedAt: order.fulfillment_requested_at || null,
+      shippedAt: order.shipped_at || null,
+      deliveredAt: order.delivered_at || null,
+      refundedAt: order.refunded_at || null,
+      createdAt: order.created_at,
+      updatedAt: order.updated_at,
+      subtotal: Number(order.subtotal_usd || 0),
+      discount: Number(order.discount_usd || 0),
+      shipping: Number(order.shipping_usd || 0),
+      tax: 0,
+      totalAmount: Number(order.total_usd || 0),
+      giftOptions: order.gift_options || null,
+      items,
+    };
+  },
+  checkUserDeliveredProduct: (_userId, userEmail, productId) => {
+    const store = readStore();
+    return (store.orders || []).some((o) => {
+      const sameOwner = userEmail && normalizeEmail(o.customer_email) === userEmail;
+      const isDeliv = Boolean(o.delivered_at) || String(o.status || '').toUpperCase() === 'DELIVERED';
+      if (!sameOwner || !isDeliv) return false;
+      return Array.isArray(o.items) && o.items.some((it) => it.id === productId || it.sku === productId);
+    });
+  },
+});
 
 app.get('*', (_req, res) => {
   const distIndex = path.join(DIST_DIR, 'index.html');
